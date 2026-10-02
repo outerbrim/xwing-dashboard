@@ -1,0 +1,1555 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Timer, round tracker, score keeper and match history for X-Wing Miniatures, with YASB squad import.">
+<meta name="theme-color" content="#090d15">
+<meta property="og:title" content="X-Wing Game Dashboard">
+<meta property="og:description" content="Timer, round tracker, score keeper and match history for X-Wing Miniatures.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="X-Wing">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html,body{margin:0}[hidden]{display:none!important}</style>
+<title>X-Wing Game Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Saira+Condensed:wght@500;600;700&display=swap">
+<style>
+/* Layout: sticky HUD bar over a two-up board. Timer and round tracker sit on top, one card per player below.
+   Each player card is tinted by its faction. Dark flight-deck palette first, light variant for bright rooms. */
+:root {
+  --bg: #090d15;
+  --surface: #101725;
+  --surface-2: #172134;
+  --surface-3: #1f2b42;
+  --line: #26324a;
+  --fg: #e8edf7;
+  --fg-dim: #98a4bc;
+  --fg-faint: #66738d;
+  --accent: #8bb8ff;
+  --on-accent: #08111f;
+  --ok: #4fd6a0;
+  --warn: #ffb23e;
+  --yellow: #ffd23f;
+  --crit: #ff5d57;
+  --shield: #5db8ff;
+  --hull: #ffd23f;
+  --p1: #2ad4f0;
+  --p2: #ff4d54;
+  --p1t: #2ad4f0;
+  --p2t: #ff6b70;
+  --glow: .16;
+  --font-display: 'Saira Condensed', 'Arial Narrow', 'Roboto Condensed', system-ui, sans-serif;
+  --font-body: 'Barlow', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --radius: 16px;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #e9edf5; --surface: #ffffff; --surface-2: #f2f5fb; --surface-3: #e4eaf4; --line: #d0d9e8;
+    --fg: #0d1626; --fg-dim: #4a5874; --fg-faint: #8591a9;
+    --accent: #1f5fd6; --on-accent: #ffffff;
+    --ok: #0b8f61; --warn: #a96300; --crit: #c92a25; --shield: #1488dc; --hull: #e0a800; --glow: .13; --yellow: #e0a800;
+    --p1: #17b4d1; --p2: #ef4444; --p1t: #0a7d93; --p2t: #c62828;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #e9edf5; --surface: #ffffff; --surface-2: #f2f5fb; --surface-3: #e4eaf4; --line: #d0d9e8;
+  --fg: #0d1626; --fg-dim: #4a5874; --fg-faint: #8591a9;
+  --accent: #1f5fd6; --on-accent: #ffffff;
+  --ok: #0b8f61; --warn: #a96300; --crit: #c92a25; --shield: #1488dc; --hull: #e0a800; --glow: .13; --yellow: #e0a800;
+  --p1: #17b4d1; --p2: #ef4444; --p1t: #0a7d93; --p2t: #c62828;
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--font-body); font-size: 15px; line-height: 1.4;
+  padding-inline: 16px; padding-block: 0 48px;
+  min-height: 100%; -webkit-tap-highlight-color: transparent;
+}
+body::before {
+  content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(60% 50% at 0% 0%, color-mix(in srgb, var(--p1) calc(var(--glow) * 100%), transparent), transparent 70%),
+    radial-gradient(60% 50% at 100% 0%, color-mix(in srgb, var(--p2) calc(var(--glow) * 100%), transparent), transparent 70%);
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; border: 0; background: none; touch-action: manipulation; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
+.num { font-family: var(--font-display); font-variant-numeric: tabular-nums; letter-spacing: .01em; }
+.label { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--fg-dim); font-weight: 600; }
+svg { display: block; }
+.ic { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+/* ---------- HUD bar ---------- */
+.bar {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
+  margin-inline: -16px; padding: 10px 16px;
+  display: flex; align-items: center; gap: 12px;
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.brand svg { width: 26px; height: 26px; color: var(--accent); }
+.brand b { font-family: var(--font-display); font-size: 19px; letter-spacing: .06em; text-transform: uppercase; font-weight: 700; white-space: nowrap; }
+.hud { flex: 1; display: flex; justify-content: center; align-items: center; gap: 16px; min-width: 0; }
+.hud .cell { display: flex; flex-direction: column; align-items: center; line-height: 1; gap: 3px; white-space: nowrap; flex: none; }
+.hud .cell .num { font-size: 22px; font-weight: 600; }
+.hud .cell .label { font-size: 9px; letter-spacing: .16em; }
+.hud .num { white-space: nowrap; }
+.hud .vs { color: var(--fg-faint); font-size: 16px; }
+.hud .s1 { color: var(--p1t); } .hud .s2 { color: var(--p2t); }
+.hud .t.warn { color: var(--warn); } .hud .t.crit { color: var(--crit); }
+.tools { display: flex; gap: 4px; }
+.icon-btn {
+  width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center;
+  color: var(--fg-dim); background: transparent; transition: background .15s, color .15s;
+}
+.icon-btn:hover { background: var(--surface-2); color: var(--fg); }
+.icon-btn:disabled { opacity: .35; cursor: default; }
+.icon-btn:disabled:hover { background: transparent; color: var(--fg-dim); }
+
+main { max-width: 1240px; margin: 0 auto; padding-top: 16px; display: grid; gap: 16px; }
+.top { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+.players { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 900px) {
+  .top { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); }
+  .players { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+}
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; min-width: 0; }
+
+/* ---------- buttons ---------- */
+.btn {
+  min-height: 44px; padding: 0 16px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  background: var(--surface-3); color: var(--fg); font-weight: 600; font-size: 15px; transition: transform .08s, background .15s, filter .15s;
+}
+.btn:hover { filter: brightness(1.12); }
+.btn:active { transform: scale(.97); }
+.btn.primary { background: var(--accent); color: var(--on-accent); }
+.btn.ghost { background: transparent; border: 1px solid var(--line); }
+.btn.danger { background: color-mix(in srgb, var(--crit) 20%, var(--surface-3)); color: var(--crit); }
+.btn.armed { background: var(--crit); color: #fff; }
+.btn:disabled { opacity: .4; cursor: default; }
+.btn.sm { min-height: 36px; padding: 0 12px; font-size: 13px; border-radius: 10px; }
+
+/* ---------- timer ---------- */
+.timer { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px; align-items: center; }
+.ring { position: relative; width: clamp(128px, 36vw, 168px); aspect-ratio: 1; flex: none; }
+.ring svg { width: 100%; height: 100%; }
+.ring .track { stroke: var(--surface-3); }
+.ring .prog { stroke: var(--accent); transition: stroke .3s; }
+.ring .tk { stroke: var(--fg-faint); }
+.ring .tk.major { stroke: var(--fg-dim); }
+.ring .face { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 2px; }
+.ring .time { font-size: clamp(34px, 9vw, 44px); font-weight: 600; line-height: 1; }
+.ring .state { font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: var(--fg-dim); font-weight: 600; }
+.timer[data-level="warn"] .prog { stroke: var(--warn); }
+.timer[data-level="crit"] .prog, .timer[data-level="done"] .prog { stroke: var(--crit); }
+.timer[data-level="warn"] .time { color: var(--warn); }
+.timer[data-level="crit"] .time, .timer[data-level="done"] .time { color: var(--crit); }
+.timer[data-level="done"] .time { animation: pulse 1s ease-in-out infinite; }
+.timer .side { display: grid; gap: 10px; min-width: 0; }
+.timer .row { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.adj { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.adj .btn { padding: 0; min-height: 38px; font-size: 14px; }
+.meta { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--fg-dim); font-size: 13px; }
+.meta b { color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; }
+.banner { padding: 8px 12px; border-radius: 10px; background: color-mix(in srgb, var(--crit) 18%, transparent); color: var(--crit); font-weight: 600; font-size: 13px; }
+@media (min-width: 900px) {
+  .timer { grid-template-columns: 1fr; justify-items: center; text-align: center; }
+  .ring { width: 232px; }
+  .ring .time { font-size: 62px; }
+  .timer .side { width: 100%; }
+  .meta { justify-content: center; }
+}
+@keyframes pulse { 50% { opacity: .45; } }
+
+/* ---------- round ---------- */
+.round-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.round-head h2 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 34px; line-height: 1; letter-spacing: .02em; }
+.round-head h2 small { font-size: 20px; color: var(--fg-dim); font-weight: 500; }
+.pace { font-size: 13px; color: var(--fg-dim); }
+.pace b { color: var(--fg); font-variant-numeric: tabular-nums; }
+.pace.tight b { color: var(--warn); }
+.pips { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 5px; margin-bottom: 14px; }
+.pips.many { grid-template-columns: repeat(10, minmax(0, 1fr)); }
+.pip {
+  height: 40px; border-radius: 9px; background: var(--surface-2); border: 1px solid var(--line); color: var(--fg-faint);
+  font-family: var(--font-display); font-size: 16px; font-weight: 600; display: grid; place-items: center; transition: background .15s;
+}
+.pip.done { background: var(--surface-3); color: var(--fg-dim); }
+.pip.now { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.phases { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; margin-bottom: 12px; }
+.phase {
+  min-height: 44px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line); color: var(--fg-dim);
+  font-size: 11.5px; font-weight: 600; letter-spacing: .02em; padding: 0 2px; display: grid; place-items: center; text-align: center;
+}
+.phase.now { background: color-mix(in srgb, var(--accent) 18%, var(--surface-2)); border-color: var(--accent); color: var(--fg); }
+.phase.past { color: var(--fg-faint); }
+.phase-hint { font-size: 13px; color: var(--fg-dim); margin: 0 0 12px; min-height: 36px; }
+.round-nav { display: grid; grid-template-columns: auto 1fr; gap: 8px; }
+@media (min-width: 480px) { .phase { font-size: 13px; letter-spacing: .04em; } }
+
+/* ---------- player ---------- */
+.player { --c: var(--p1); padding: 0; overflow: hidden; border-color: color-mix(in srgb, var(--c) 38%, var(--line)); }
+.player[data-i="1"] { --c: var(--p2); }
+.ph { padding: 14px 16px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--c) 20%, var(--surface)), var(--surface)); }
+.ph .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 4px color-mix(in srgb, var(--c) 25%, transparent); flex: none; }
+.name-in {
+  flex: 1 1 140px; min-width: 0; background: transparent; border: 0; border-bottom: 1px dashed transparent;
+  font-family: var(--font-display); font-size: 24px; font-weight: 600; letter-spacing: .02em; padding: 2px 0;
+}
+.name-in:hover, .name-in:focus { border-bottom-color: var(--line); }
+.sel {
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; min-height: 36px; padding: 0 8px; font-size: 13px; max-width: 100%;
+}
+.fbadge { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 12px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); font-size: 13px; font-weight: 600; }
+.fbadge.none { color: var(--fg-faint); font-weight: 500; }
+.sq-toggle .t .fdot { margin-right: 2px; }
+.init { min-height: 36px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); color: var(--fg-dim); font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+.init[aria-pressed="true"] { background: var(--c); border-color: var(--c); color: #0b0f17; }
+.scorebox { padding: 8px 16px 16px; display: grid; gap: 12px; }
+.sc-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.score { font-size: clamp(84px, 22vw, 128px); font-weight: 700; line-height: .85; color: var(--fg); }
+.score.bump { animation: bump .28s ease-out; }
+@keyframes bump { 0% { transform: scale(1.14); color: var(--c); } 100% { transform: scale(1); } }
+.sc-side { text-align: right; display: grid; gap: 6px; justify-items: end; padding-bottom: 4px; min-width: 0; }
+.lead { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; padding: 5px 10px; border-radius: 999px; background: var(--surface-3); color: var(--fg-dim); white-space: nowrap; }
+.lead.up { background: color-mix(in srgb, var(--ok) 20%, transparent); color: var(--ok); }
+.lead.down { background: color-mix(in srgb, var(--crit) 16%, transparent); color: var(--crit); }
+.split { font-size: 13px; color: var(--fg-dim); }
+.split b { color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; }
+.pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.pbtn { min-height: 54px; border-radius: 13px; font-family: var(--font-display); font-size: 24px; font-weight: 600; transition: transform .08s, filter .15s; }
+.pbtn:active { transform: scale(.95); }
+.pbtn.plus { background: var(--c); color: #0b0f17; }
+.pbtn.plus:hover { filter: brightness(1.1); }
+.pbtn.minus { background: var(--surface-2); border: 1px solid var(--line); color: var(--fg-dim); min-height: 44px; font-size: 20px; }
+.pbtn.minus:hover { color: var(--fg); background: var(--surface-3); }
+
+/* ---------- squad ---------- */
+.squad { border-top: 1px solid var(--line); padding: 14px 16px 16px; display: grid; gap: 12px; }
+.sq-head { display: flex; justify-content: space-between; gap: 8px; align-items: center; flex-wrap: wrap; }
+.sq-head .t { display: grid; gap: 2px; min-width: 0; }
+.sq-head .t b { font-family: var(--font-display); font-size: 18px; font-weight: 600; letter-spacing: .03em; overflow-wrap: anywhere; }
+.sq-head .t span { font-size: 13px; color: var(--fg-dim); }
+.sq-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.empty { border: 1px dashed var(--line); border-radius: 14px; padding: 18px 14px; text-align: center; display: grid; gap: 10px; justify-items: center; color: var(--fg-dim); font-size: 14px; }
+.empty p { margin: 0; max-width: 34ch; }
+.ship { background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.ship[data-state="half"] { border-color: color-mix(in srgb, var(--warn) 55%, var(--line)); }
+.ship[data-state="dead"] { border-color: color-mix(in srgb, var(--crit) 45%, var(--line)); }
+.ship[data-state="dead"] .s-head { opacity: .55; }
+.s-head { width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 12px; text-align: left; }
+.initb { width: 38px; height: 38px; border-radius: 50%; border: 2px solid var(--c); display: grid; place-items: center; font-family: var(--font-display); font-weight: 700; font-size: 20px; }
+.s-name { font-weight: 600; font-size: 16px; line-height: 1.2; overflow-wrap: anywhere; }
+.s-name i { font-style: normal; color: var(--c); margin-right: 4px; }
+.s-sub { font-size: 12.5px; color: var(--fg-dim); overflow-wrap: anywhere; }
+.cost { font-family: var(--font-display); font-size: 20px; font-weight: 600; color: var(--fg-dim); }
+.chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; background: var(--surface-3); color: var(--fg-dim); letter-spacing: .02em; }
+.chip.half { background: color-mix(in srgb, var(--warn) 20%, transparent); color: var(--warn); }
+.chip.dead { background: color-mix(in srgb, var(--crit) 20%, transparent); color: var(--crit); }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.s-body { padding: 0 12px 12px; display: grid; gap: 10px; }
+.stat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; display: grid; gap: 6px; min-width: 0; }
+.stat.wide { grid-column: 1 / -1; }
+.stat .top { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.rec { font-style: normal; font-size: 10.5px; letter-spacing: .04em; text-transform: none; color: var(--accent); font-weight: 600; }
+.stat .top .val { font-family: var(--font-display); font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.stat .top .val small { color: var(--fg-faint); font-weight: 500; font-size: 14px; }
+.step { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 8px; align-items: center; }
+.step .dots { grid-column: 1 / -1; order: -1; }
+.step button { height: 40px; border-radius: 10px; background: var(--surface-3); font-size: 20px; font-weight: 600; line-height: 1; }
+.step button:active { transform: scale(.94); }
+.step button:disabled { opacity: .35; }
+.dots { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; min-height: 14px; }
+.dots i { width: 14px; height: 14px; border-radius: 4px; background: var(--surface-3); }
+.dots i.on { background: var(--k); }
+.dots.shield { --k: var(--shield); } .dots.hull { --k: var(--hull); } .dots.charge { --k: var(--warn); } .dots.force { --k: #c79bff; }
+.dots i.on { border-radius: 4px; }
+.dots.shield i { border-radius: 50%; }
+.sub-h { margin: 4px 0 0; }
+.up { display: grid; gap: 6px; padding: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+.up .u-top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.up .u-n { font-weight: 600; font-size: 14px; overflow-wrap: anywhere; }
+.up .u-n small { color: var(--fg-dim); font-weight: 500; margin-left: 6px; }
+.up .u-c { font-family: var(--font-display); color: var(--fg-dim); font-size: 16px; }
+.txt { font-size: 13px; color: var(--fg-dim); line-height: 1.45; margin: 0; overflow-wrap: anywhere; }
+.txt .tg { display: inline-block; padding: 0 5px; border-radius: 5px; background: var(--surface-3); color: var(--fg); font-size: 11.5px; font-weight: 600; }
+.toks { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 6px; }
+.tok { display: grid; grid-template-columns: 30px 1fr 30px; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.tok button { height: 36px; font-size: 16px; color: var(--fg-dim); }
+.tok button:active { background: var(--surface-3); }
+.tok span { text-align: center; font-size: 11px; line-height: 1.15; padding: 2px 0; color: var(--fg-dim); }
+.tok span b { display: block; font-family: var(--font-display); font-size: 17px; font-weight: 600; color: var(--fg-dim); }
+.tok.has { border-color: var(--accent); }
+.tok.has span b { color: var(--accent); }
+.s-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* ---------- dialogs ---------- */
+dialog {
+  width: min(560px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); padding: 0; margin: auto;
+  background: var(--surface); color: var(--fg); border: 1px solid var(--line); border-radius: 20px; overflow: hidden;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, .5);
+}
+dialog[open] { display: flex; flex-direction: column; animation: pop .18s ease-out; }
+dialog::backdrop { background: rgba(4, 7, 13, .66); backdrop-filter: blur(3px); }
+@keyframes pop { from { transform: translateY(10px) scale(.98); opacity: 0; } }
+.d-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.d-head h3 { margin: 0; font-family: var(--font-display); font-size: 24px; font-weight: 600; letter-spacing: .03em; }
+.d-body { padding: 16px; overflow: auto; display: grid; gap: 14px; }
+.field { display: grid; gap: 6px; }
+.field > span { font-size: 13px; color: var(--fg-dim); }
+textarea {
+  width: 100%; min-height: 110px; resize: vertical; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; font-size: 14px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all;
+}
+input[type="number"] { width: 84px; min-height: 40px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 0 10px; font-variant-numeric: tabular-nums; }
+.seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; background: var(--surface-2); padding: 4px; border-radius: 12px; border: 1px solid var(--line); }
+.seg button { min-height: 40px; border-radius: 9px; color: var(--fg-dim); font-weight: 600; font-size: 14px; padding: 0 8px; overflow-wrap: anywhere; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
+.msg { font-size: 13px; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); color: var(--fg-dim); overflow-wrap: anywhere; }
+.msg.err { background: color-mix(in srgb, var(--crit) 14%, transparent); color: var(--crit); }
+.msg.ok { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
+.preview { display: grid; gap: 4px; font-size: 13px; }
+.preview .pv { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 8px 10px; background: var(--surface-2); border-radius: 10px; }
+.preview .pv small { color: var(--fg-dim); display: block; overflow-wrap: anywhere; }
+.row-between { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.switch { position: relative; width: 48px; height: 28px; border-radius: 999px; background: var(--surface-3); border: 1px solid var(--line); flex: none; }
+.switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--fg-dim); transition: transform .15s, background .15s; }
+.switch[aria-checked="true"] { background: var(--accent); border-color: var(--accent); }
+.switch[aria-checked="true"]::after { transform: translateX(20px); background: var(--on-accent); }
+.setrow { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.setrow small { display: block; color: var(--fg-dim); font-size: 12.5px; }
+.chipset { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chipset .btn { min-height: 40px; padding: 0 14px; }
+.chipset .btn[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
+.keys { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 13px; color: var(--fg-dim); }
+kbd { font-family: ui-monospace, Menlo, monospace; font-size: 12px; background: var(--surface-3); border-radius: 6px; padding: 1px 6px; color: var(--fg); }
+.log { display: grid; gap: 4px; }
+.log .li { display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 10px; padding: 8px 10px; border-radius: 10px; background: var(--surface-2); font-size: 13px; align-items: baseline; }
+.log .li .r { font-family: var(--font-display); font-weight: 600; color: var(--accent); }
+.log .li .tm { color: var(--fg-faint); font-variant-numeric: tabular-nums; }
+.result { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.res { background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px; padding: 12px; text-align: center; display: grid; gap: 4px; --c: var(--p1); }
+.res[data-i="1"] { --c: var(--p2); }
+.res.win { border-color: var(--c); background: color-mix(in srgb, var(--c) 14%, var(--surface-2)); }
+.res .big { font-family: var(--font-display); font-size: 64px; font-weight: 700; line-height: 1; }
+.verdict { text-align: center; font-family: var(--font-display); font-size: 28px; font-weight: 600; letter-spacing: .03em; }
+.verdict small { display: block; font-family: var(--font-body); font-size: 13px; color: var(--fg-dim); letter-spacing: 0; font-weight: 400; }
+.foot { text-align: center; color: var(--fg-faint); font-size: 12px; padding-top: 8px; }
+@media (max-width: 520px) { .brand { display: none; } }
+@media (max-width: 420px) {
+  .bar { gap: 8px; }
+  .hud { gap: 12px; }
+  .hud .cell .num { font-size: 20px; }
+  .icon-btn { width: 34px; height: 40px; }
+  .ring { width: 118px; }
+  .ring .time { font-size: 32px; }
+  .timer { gap: 12px; }
+  .timer .row .btn { padding: 0 10px; }
+  .adj { gap: 4px; }
+  .phase { font-size: 10.5px; letter-spacing: 0; }
+}
+
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.fdot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.link { color: var(--accent); font-weight: 600; font-size: 13.5px; text-decoration: none; white-space: nowrap; min-height: 40px; display: inline-flex; align-items: center; gap: 4px; }
+.link:hover { text-decoration: underline; }
+.txt-in { background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; min-height: 40px; padding: 0 12px; width: 100%; }
+.toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 16px); background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 12px; font-weight: 600; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 100; max-width: calc(100vw - 32px); }
+.toast.on { opacity: 1; transform: translate(-50%, 0); }
+
+/* scenario + status */
+.scen { display: grid; gap: 8px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.scen-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.scen-row .sel { flex: 1 1 200px; min-height: 42px; font-size: 14px; }
+details.scen-d summary { cursor: pointer; color: var(--fg-dim); font-size: 13px; min-height: 32px; display: flex; align-items: center; }
+details.scen-d .txt { margin-top: 6px; }
+.status { padding: 10px 12px; border-radius: 12px; font-size: 13.5px; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; background: var(--surface-2); border: 1px solid var(--line); margin-bottom: 12px; }
+.status.w0 { --c: var(--p1); } .status.w1 { --c: var(--p2); }
+.status.win { border-color: var(--c); background: color-mix(in srgb, var(--c) 16%, var(--surface-2)); }
+.status.pend { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, var(--surface-2)); }
+.round-foot { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+
+/* squad fold */
+.sq-toggle { display: flex; gap: 8px; align-items: center; text-align: left; min-width: 0; flex: 1 1 200px; padding: 2px 0; color: inherit; }
+.sq-toggle svg { width: 18px; height: 18px; color: var(--fg-dim); transition: transform .2s; transform: rotate(-90deg); }
+.sq-toggle[aria-expanded="true"] svg { transform: none; }
+.sq-mini { display: flex; flex-wrap: wrap; gap: 6px; }
+.mini { display: inline-flex; gap: 6px; align-items: center; padding: 4px 9px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); font-size: 12.5px; }
+.mini b { font-family: var(--font-display); font-weight: 600; font-size: 14px; color: var(--fg-dim); }
+.mini.half { border-color: color-mix(in srgb, var(--warn) 55%, var(--line)); }
+.mini.dead { border-color: color-mix(in srgb, var(--crit) 45%, var(--line)); text-decoration: line-through; color: var(--fg-faint); }
+
+/* glance */
+body[data-view="glance"] { overflow: hidden; }
+.glance {
+  position: fixed; inset: 0; z-index: 40; display: flex; flex-direction: column; gap: 10px; background: var(--bg);
+  padding: calc(10px + env(safe-area-inset-top, 0px)) 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(100%); visibility: hidden; transition: transform .32s cubic-bezier(.2, .8, .2, 1), visibility 0s .32s;
+}
+body[data-view="glance"] .glance { transform: none; visibility: visible; transition: transform .32s cubic-bezier(.2, .8, .2, 1), visibility 0s; }
+.g-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.g-dots { display: flex; gap: 6px; }
+.g-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--surface-3); }
+.g-dots i.on { background: var(--accent); }
+.g-tools { display: flex; gap: 4px; }
+#glance-body { flex: 1; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.g-top { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.g-stat { display: grid; gap: 4px; justify-items: center; padding: 10px 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; min-width: 0; }
+.g-time, .g-round { font-size: min(17vw, 16vh); font-weight: 600; line-height: .95; }
+.g-round small { font-size: .5em; color: var(--fg-dim); font-weight: 500; }
+.glance[data-level="warn"] .g-time { color: var(--warn); }
+.glance[data-level="crit"] .g-time, .glance[data-level="done"] .g-time { color: var(--crit); }
+.glance[data-level="done"] .g-time { animation: pulse 1s ease-in-out infinite; }
+.g-info { text-align: center; color: var(--fg-dim); font-size: 14px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.g-info b { color: var(--fg); }
+.g-scores { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; min-height: 0; }
+.g-score { --c: var(--p1); --ct: var(--p1t); border-radius: 26px; background: color-mix(in srgb, var(--c) 13%, var(--surface)); border: 1px solid color-mix(in srgb, var(--c) 45%, var(--line));
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 12px 8px; min-width: 0; min-height: 0; }
+.g-score[data-i="1"] { --c: var(--p2); --ct: var(--p2t); }
+.g-name { font-size: 15px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center; max-width: 100%; overflow-wrap: anywhere; text-align: center; }
+.g-name em { font-style: normal; font-size: 10.5px; padding: 2px 8px; border-radius: 999px; background: var(--c); color: #0b0f17; letter-spacing: .1em; }
+.g-num { font-size: min(46vw, 42vh); font-weight: 700; line-height: .8; color: var(--ct); }
+.g-meta { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; font-size: 13px; color: var(--fg-dim); }
+.g-track { width: min(90%, 320px); height: 8px; border-radius: 4px; background: var(--surface-3); overflow: hidden; }
+.g-track i { display: block; height: 100%; background: var(--c); border-radius: 4px; transition: width .3s; }
+@media (orientation: landscape) and (max-height: 520px) {
+  .g-top { grid-template-columns: repeat(2, 1fr); } .g-time, .g-round { font-size: min(11vw, 18vh); } .g-num { font-size: min(30vw, 46vh); }
+}
+
+/* history */
+dialog.wide { width: min(980px, calc(100vw - 24px)); height: min(900px, calc(100dvh - 24px)); }
+dialog.wide .d-body { flex: 1; align-content: start; }
+.grp { margin: 8px 0 0; font-family: var(--font-display); font-size: 20px; font-weight: 600; letter-spacing: .03em; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.grp small { font-family: var(--font-body); color: var(--fg-dim); font-size: 12.5px; font-weight: 400; letter-spacing: 0; }
+.match { background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; min-width: 0; }
+.m-head { width: 100%; display: grid; gap: 8px; padding: 12px; text-align: left; }
+.m-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12.5px; color: var(--fg-dim); align-items: center; }
+.m-score { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 10px; align-items: center; }
+.m-score .side { display: grid; gap: 2px; min-width: 0; }
+.m-score .side.r { text-align: right; justify-items: end; }
+.m-score .nm { font-weight: 600; overflow-wrap: anywhere; display: flex; gap: 6px; align-items: center; }
+.m-score .side.r .nm { flex-direction: row-reverse; }
+.m-score small { color: var(--fg-dim); font-size: 12px; }
+.m-score .sc { font-family: var(--font-display); font-size: 34px; font-weight: 700; line-height: 1; color: var(--fg-dim); }
+.m-score .side.won .sc { color: var(--fg); }
+.m-score .side.s0 .nm i { background: var(--p1); } .m-score .side.s1 .nm i { background: var(--p2); }
+.m-score .nm i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.m-score .dash { color: var(--fg-faint); }
+.m-body { padding: 0 12px 12px; display: grid; gap: 12px; }
+.sqb { display: grid; gap: 4px; }
+.sqb .ln { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 6px 8px; background: var(--surface); border-radius: 8px; font-size: 13px; }
+.sqb .ln small { color: var(--fg-dim); display: block; overflow-wrap: anywhere; }
+.sqb .ln b { font-family: var(--font-display); color: var(--fg-dim); font-weight: 600; }
+.rec { font-weight: 700; color: var(--fg); font-variant-numeric: tabular-nums; }
+.hrow { display: grid; grid-template-columns: minmax(0, 1fr) 36px 52px 84px; gap: 10px; align-items: center; padding: 9px 10px; border-radius: 10px; background: var(--surface-2); font-size: 13.5px; width: 100%; text-align: left; }
+button.hrow:hover { background: var(--surface-3); }
+.hrow.hh { background: transparent; color: var(--fg-dim); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; font-weight: 600; padding-block: 2px; }
+.hrow .nm small { display: block; color: var(--fg-dim); font-size: 12px; overflow-wrap: anywhere; }
+.hrow .v { font-family: var(--font-display); font-size: 17px; font-variant-numeric: tabular-nums; text-align: right; }
+.hrow .pct { display: grid; gap: 3px; justify-items: end; font-variant-numeric: tabular-nums; }
+.hrow .pct b { font-family: var(--font-display); font-size: 16px; font-weight: 600; }
+.bar2 { display: block; height: 5px; border-radius: 3px; background: var(--surface-3); overflow: hidden; width: 100%; }
+.bar2 i { display: block; height: 100%; background: var(--ok); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.tile { background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 2px; }
+.tile b { font-family: var(--font-display); font-size: 30px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+.tile span { font-size: 12px; color: var(--fg-dim); }
+.sec-h { margin: 6px 0 -4px; display: flex; justify-content: space-between; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.sec-t { display: flex; align-items: center; gap: 6px; min-height: 36px; color: inherit; text-align: left; }
+.sec-t svg { width: 18px; height: 18px; color: var(--fg-dim); transition: transform .2s; }
+.sec-t[aria-expanded="false"] svg { transform: rotate(-90deg); }
+.sec-h h4 { margin: 0; font-family: var(--font-display); font-size: 20px; font-weight: 600; letter-spacing: .03em; }
+.sec-h small { color: var(--fg-dim); font-size: 12.5px; }
+.list-stack { display: grid; gap: 4px; }
+.name-in.sm { font-size: 20px; }
+details.bk summary { cursor: pointer; color: var(--fg-dim); font-size: 13px; min-height: 36px; display: flex; align-items: center; }
+@media (max-width: 520px) { .hrow { grid-template-columns: minmax(0, 1fr) 30px 46px 64px; gap: 8px; } .m-score .sc { font-size: 28px; } }
+
+/* glance clock + round bar */
+.g-round { display: grid; gap: 6px; }
+.g-rl { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.g-rl b { font-family: var(--font-display); font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.g-rl b small { color: var(--fg-dim); font-weight: 500; font-size: 14px; }
+.g-rbar { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; }
+.g-rbar i { height: 8px; border-radius: 4px; background: var(--surface-3); overflow: hidden; display: block; }
+.g-rbar i.done { background: var(--yellow); }
+.g-rbar i b { display: block; height: 100%; background: var(--yellow); border-radius: 4px; }
+.g-clock { --d: min(54vw, 30vh); position: relative; width: var(--d); aspect-ratio: 1; margin-inline: auto; flex: none; }
+.g-clock svg { width: 100%; height: 100%; }
+.g-clock .gtrack { stroke: var(--surface-3); }
+.g-clock .gprog { stroke: var(--accent); transition: stroke .3s; }
+.g-face { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 2px; }
+.g-clock .g-time { font-size: calc(var(--d) * .27); }
+.g-play { width: calc(var(--d) * .2); height: calc(var(--d) * .2); min-width: 40px; min-height: 40px; border-radius: 50%; margin: 6px auto 0; display: grid; place-items: center; background: var(--accent); color: var(--on-accent); transition: transform .08s, filter .15s; }
+.g-play:hover { filter: brightness(1.1); } .g-play:active { transform: scale(.94); }
+.g-play .ic { width: 45%; height: 45%; }
+.g-state { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--fg-dim); font-weight: 600; }
+.glance[data-level="warn"] .gprog { stroke: var(--warn); }
+.glance[data-level="crit"] .gprog, .glance[data-level="done"] .gprog { stroke: var(--crit); }
+@media (orientation: landscape) and (max-height: 520px) { .g-clock { --d: min(30vw, 34vh); } }
+
+
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+</head>
+<body>
+<header class="bar">
+  <div class="brand">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3v26M16 8 4 22M16 8l12 14M4 22l5-1M28 22l-5-1"/><circle cx="16" cy="16" r="3" fill="currentColor"/></g></svg>
+    <b>X-Wing Dashboard</b>
+  </div>
+  <div class="hud" aria-live="off">
+    <div class="cell"><span class="num t" id="hud-time">75:00</span><span class="label">Time</span></div>
+    <div class="cell"><span class="num"><span class="s1" id="hud-s1">0</span> <span class="vs">–</span> <span class="s2" id="hud-s2">0</span></span><span class="label">Score</span></div>
+    <div class="cell"><span class="num" id="hud-round">1/12</span><span class="label">Round</span></div>
+  </div>
+  <div class="tools">
+    <button class="icon-btn" id="undo" data-act="undo" aria-label="Undo last change" title="Undo (Z)"><svg class="ic" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button>
+    <button class="icon-btn" data-act="view" data-d="toggle" aria-label="At a glance screen" title="At a glance (G)"><svg class="ic" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+    <button class="icon-btn" data-act="open" data-d="dlg-hist" aria-label="History and stats" title="History and stats"><svg class="ic" viewBox="0 0 24 24"><path d="M4 20V11M10 20V4M16 20v-7M22 20H2"/></svg></button>
+    <button class="icon-btn" data-act="open" data-d="dlg-set" aria-label="Settings" title="Settings"><svg class="ic" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg></button>
+  </div>
+</header>
+
+<main>
+  <div class="top">
+    <section class="card timer" id="timer" data-level="idle" aria-label="Game timer">
+      <div class="ring">
+        <svg viewBox="-112 -112 224 224" aria-hidden="true">
+          <g id="ticks"></g>
+          <circle class="track" r="92" fill="none" stroke-width="10"/>
+          <circle class="prog" id="prog" r="92" fill="none" stroke-width="10" stroke-linecap="round" transform="rotate(-90)"/>
+        </svg>
+        <div class="face"><div class="num time" id="time">75:00</div><div class="state" id="tstate">Ready</div></div>
+      </div>
+      <div class="side">
+        <div class="row">
+          <button class="btn primary" id="tgo" data-act="timer-toggle"></button>
+          <button class="btn" id="treset" data-act="timer-reset" aria-label="Reset timer">Reset</button>
+        </div>
+        <div class="adj" role="group" aria-label="Adjust time">
+          <button class="btn sm" data-act="timer-adj" data-d="-5">−5m</button>
+          <button class="btn sm" data-act="timer-adj" data-d="-1">−1m</button>
+          <button class="btn sm" data-act="timer-adj" data-d="1">+1m</button>
+          <button class="btn sm" data-act="timer-adj" data-d="5">+5m</button>
+        </div>
+        <div class="meta"><span id="tends"></span><span id="tpace"></span></div>
+        <div class="banner" id="tbanner" hidden>Time called. Finish the current round per your event rules.</div>
+      </div>
+    </section>
+
+    <section class="card" id="round" aria-label="Round tracker"></section>
+  </div>
+
+  <div class="players" id="players"></div>
+  <p class="foot" id="foot"></p>
+</main>
+
+<section class="glance" id="glance" data-level="idle" aria-label="At a glance" inert>
+  <div class="g-bar">
+    <button class="btn sm ghost" data-act="view" data-d="board">‹ Board</button>
+    <div class="g-dots" aria-hidden="true"><i></i><i class="on"></i></div>
+    <div class="g-tools">
+      <button class="icon-btn" id="g-fs" data-act="fs" aria-label="Full screen" title="Full screen"><svg class="ic" viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg></button>
+    </div>
+  </div>
+  <div id="glance-body"></div>
+</section>
+<div class="toast" id="toast" role="status"></div>
+
+<dialog id="dlg-hist" class="wide" aria-labelledby="hist-h">
+  <div class="d-head"><h3 id="hist-h">History and stats</h3><button class="icon-btn" data-act="close" aria-label="Close"><svg class="ic" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+  <div class="d-body" id="hist-body"></div>
+</dialog>
+
+<dialog id="dlg-import" aria-labelledby="imp-h">
+  <div class="d-head"><h3 id="imp-h">Import squad</h3><button class="icon-btn" data-act="close" aria-label="Close"><svg class="ic" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+  <div class="d-body">
+    <div class="field"><span>Load into</span><div class="seg" id="imp-target" role="group"></div></div>
+    <label class="field" for="imp-text"><span>Paste a YASB link, or XWS JSON from YASB's Export XWS</span>
+      <textarea id="imp-text" placeholder="https://yasb.app/?f=Rebel%20Alliance&d=v10Zs…" spellcheck="false" autocomplete="off"></textarea></label>
+    <label class="field" for="imp-saved"><span>Or pick one of your saved lists</span><select class="sel" id="imp-saved"></select></label>
+    <div class="chipset"><span class="label">Try one</span>
+      <button class="btn sm" data-act="imp-example" data-d="rebelalliance">Rebel example</button>
+      <button class="btn sm" data-act="imp-example" data-d="galacticempire">Imperial example</button>
+    </div>
+    <div id="imp-out"></div>
+    <button class="btn primary" id="imp-go" data-act="imp-load" disabled>Load squad</button>
+  </div>
+</dialog>
+
+<dialog id="dlg-log" aria-labelledby="log-h">
+  <div class="d-head"><h3 id="log-h">Game log</h3><button class="icon-btn" data-act="close" aria-label="Close"><svg class="ic" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+  <div class="d-body"><div class="log" id="log-list"></div></div>
+</dialog>
+
+<dialog id="dlg-end" aria-labelledby="end-h">
+  <div class="d-head"><h3 id="end-h">Final score</h3><button class="icon-btn" data-act="close" aria-label="Close"><svg class="ic" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+  <div class="d-body" id="end-body"></div>
+</dialog>
+
+<dialog id="dlg-set" aria-labelledby="set-h">
+  <div class="d-head"><h3 id="set-h">Settings</h3><button class="icon-btn" data-act="close" aria-label="Close"><svg class="ic" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+  <div class="d-body" id="set-body"></div>
+</dialog>
+
+<script src="data.js?v=1790926943"></script>
+<script src="sample.js?v=1790926943"></script>
+<script>
+(() => {
+'use strict';
+const D = window.XW_DATA || { ships: {}, pilots: {}, upgrades: {}, v: 'missing' };
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const canon = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
+const uid = () => Math.random().toString(36).slice(2, 9);
+
+const FACTIONS = {
+  rebelalliance: { n: 'Rebel Alliance', c: '#ff5a4d' },
+  galacticempire: { n: 'Galactic Empire', c: '#3fd18f' },
+  scumandvillainy: { n: 'Scum and Villainy', c: '#e0a93b' },
+  resistance: { n: 'Resistance', c: '#ff8f3a' },
+  firstorder: { n: 'First Order', c: '#d4455f' },
+  galacticrepublic: { n: 'Galactic Republic', c: '#e8cf6a' },
+  separatistalliance: { n: 'Separatist Alliance', c: '#5f95f5' },
+  none: { n: 'No faction', c: '#9aa7bf' },
+};
+const PHASES = [
+  ['Planning', 'Everyone secretly dials a maneuver.'],
+  ['System', 'Resolve system phase abilities, then reveal dials in some games.'],
+  ['Activation', 'Ships move and act in initiative order, lowest first.'],
+  ['Engagement', 'Ships attack in initiative order, highest first.'],
+  ['End', 'Remove tokens and check objectives. Each ship recovers 1 Force and recurring charges when you move to the next round.'],
+];
+const TOKENS = [['focus', 'Focus'], ['evade', 'Evade'], ['calc', 'Calculate'], ['lock', 'Lock'], ['stress', 'Stress'], ['strain', 'Strain'], ['ion', 'Ion'], ['jam', 'Jam'], ['tractor', 'Tractor'], ['deplete', 'Deplete']];
+const KEY = 'xwdash.v1', HKEY = 'xwdash.history.v1';
+const RULES = 'https://www.xwing.life/content/scenarios.pdf';
+const SCENARIOS = {
+  assault: { n: 'Assault at the Satellite Array', page: 3, setup: '5 satellites', obj: 'Take control of the Satellite Array before enemy forces do.',
+    score: 'Each player earns 2 mission points if they control at least 1 satellite, or 4 if they control more satellites than their opponent. You control a satellite with more ships at range 0–1 of it than any other player. Medium and large ships count as two.' },
+  chance: { n: 'Chance Engagement', page: 4, setup: '1 satellite', obj: 'Defeat enemy forces to force a retreat from the sector.',
+    score: 'You earn 2 mission points if you contest the satellite (a ship at range 0–2). If only you are contesting it, you score 2 more.' },
+  salvage: { n: 'Salvage Mission', page: 5, setup: '5 supply caches', obj: 'Retrieve as many supply caches as possible before the enemy.',
+    score: 'You earn 2 mission points if you have at least 1 supply cache on a friendly ship card, or 4 if you hold more than your opponent.' },
+  scramble: { n: 'Scramble the Transmissions', page: 6, setup: '3 satellites', obj: 'Scramble the transmissions from the satellites to deny enemy forces valuable information.',
+    score: 'Each player earns 2 mission points if they control at least 1 satellite, or 4 if they control more than their opponent. The player whose marker is on a satellite controls it.' },
+  ancient: { n: 'Ancient Knowledge', page: 7, setup: '3 data caches', obj: 'Find forgotten knowledge, and use it to your advantage against your enemy.',
+    score: 'You earn 2 mission points if at least 1 of your ships has the Ancient Knowledge condition, or 4 if you have more such ships than your opponent. Scoring 4 means one of your ships loses the condition.' },
+};
+const rulesUrl = k => RULES + '#page=' + (SCENARIOS[k] ? SCENARIOS[k].page : 2);
+
+/* ---------- state ---------- */
+const newPlayer = (i) => ({ name: 'Player ' + (i + 1), faction: 'none', manual: 0, init: false, squad: null });
+const fresh = () => ({
+  v: 1,
+  settings: { minutes: 75, rounds: 12, sound: true, wake: false, auto: true, target: 50, me: -1 },
+  timer: { status: 'idle', total: 75 * 60000, remaining: 75 * 60000, endAt: 0, warned: {} },
+  round: 1, phase: 0, scenario: '', result: null,
+  ui: { collapsed: [false, false], view: 'board' },
+  players: [newPlayer(0), newPlayer(1)],
+  log: [],
+});
+let S = fresh();
+try {
+  const raw = JSON.parse(localStorage.getItem(KEY) || 'null');
+  if (raw && raw.v === 1) S = Object.assign(fresh(), raw, { settings: Object.assign(fresh().settings, raw.settings), ui: Object.assign(fresh().ui, raw.ui) });
+} catch (e) {}
+let undoStack = [];
+const OPEN = new Set();
+let saveT = 0;
+const save = () => { clearTimeout(saveT); saveT = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }, 200); };
+
+/* ---------- history store ---------- */
+let H = { matches: [], lists: [] };
+try { const h = JSON.parse(localStorage.getItem(HKEY) || 'null'); if (h) H = { matches: h.matches || [], lists: h.lists || [], mig2: h.mig2 }; } catch (e) {}
+const saveH = () => { try { localStorage.setItem(HKEY, JSON.stringify(H)); } catch (e) {} };
+let toastT = 0;
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 2400); }
+const sigOf = ships => ships.map(s => s.pid + ':' + s.ups.map(u => u.id).sort((a, b) => a - b).join('.')).sort().join(';');
+function snapSquad(sq) {
+  if (!sq) return null;
+  const ships = sq.ships.map(s => ({ pid: s.pid, n: s.n, ship: s.ship, pts: s.pts, init: s.init, ups: s.ups.map(u => ({ id: u.id, n: u.n, s: u.s })), end: shipState(s) }));
+  return { name: sq.name || '', faction: sq.faction, points: sq.points || 0, cost: ships.reduce((a, s) => a + s.pts, 0), sig: sigOf(ships), ships };
+}
+function addList(sq) {
+  if (H.lists.some(l => l.sig === sq.sig)) return false;
+  const lead = sq.ships[0];
+  H.lists.unshift({ id: uid(), sig: sq.sig, name: sq.name || `${lead.n}${sq.ships.length > 1 ? ' +' + (sq.ships.length - 1) : ''}`, faction: sq.faction, points: sq.cost,
+    ships: sq.ships.map(s => ({ pid: s.pid, ups: s.ups.map(u => u.id) })), saved: Date.now() });
+  saveH(); return true;
+}
+function rebuildList(l) {
+  const ships = l.ships.map(x => makeShip(x.pid, x.ups)).filter(Boolean);
+  return { name: l.name, faction: l.faction, points: 0, ships, source: 'Saved' };
+}
+function recordOf(sig) {
+  const r = { w: 0, l: 0, d: 0 };
+  H.matches.forEach(m => m.p.forEach((p, i) => { if (p.squad && p.squad.sig === sig) { if (m.winner === i) r.w++; else if (m.winner === -1) r.d++; else r.l++; } }));
+  return r;
+}
+const alive = sq => sq.ships.filter(s => shipState(s) !== 'dead').length;
+const leader = () => { const a = total(0), b = total(1); return a === b ? -1 : a > b ? 0 : 1; };
+function evalEnd() {
+  const a = total(0), b = total(1), t = S.settings.target, sq = S.players.map(p => p.squad);
+  if (sq[0] && sq[1]) {
+    const x = alive(sq[0]), y = alive(sq[1]);
+    if (x === 0 && y > 0) return { winner: 1, reason: 'elimination' };
+    if (y === 0 && x > 0) return { winner: 0, reason: 'elimination' };
+    if (x === 0 && y === 0) return { winner: leader(), reason: 'elimination' };
+  }
+  if (a !== b && Math.max(a, b) >= t) return { winner: a > b ? 0 : 1, reason: 'target' };
+  if (S.round >= S.settings.rounds) return { winner: leader(), reason: 'rounds' };
+  return null;
+}
+const reasonText = r => ({ target: `Reached ${S.settings.target} or more points and leads`, rounds: 'Round limit reached', elimination: 'Only one side has ships left', manual: 'Ended manually', time: 'Time called' }[r.reason] || '');
+function saveMatch() {
+  const r = S.result, P = S.players;
+  const rec = {
+    id: uid(), t: Date.now(), scenario: S.scenario, round: S.round, usedMs: Math.max(0, S.timer.total - remaining()), target: S.settings.target,
+    winner: r.winner, reason: r.reason, me: S.settings.me, notes: (r.notes || '').trim(),
+    p: P.map((p, i) => ({ name: p.name, faction: p.faction, score: total(i), manual: p.manual, ships: fromShips(i), squad: snapSquad(p.squad) })),
+  };
+  H.matches.unshift(rec);
+  rec.p.forEach(p => { if (p.squad) addList(p.squad); });
+  saveH(); return rec;
+}
+
+/* ---------- time ---------- */
+const remaining = () => S.timer.status === 'running' ? Math.max(0, S.timer.endAt - Date.now()) : S.timer.remaining;
+const fmt = ms => { const s = Math.max(0, Math.ceil(ms / 1000)); return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); };
+const clock = ts => new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+const TH = [600, 300, 60];
+function syncWarned() { const r = remaining(); S.timer.warned = {}; TH.forEach(t => { if (r <= t * 1000) S.timer.warned[t] = true; }); }
+
+let actx = null;
+function audio() { try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === 'suspended') actx.resume(); } catch (e) {} }
+function beep(times = 1, freq = 880, len = .16) {
+  if (!S.settings.sound || !actx) return;
+  try {
+    for (let i = 0; i < times; i++) {
+      const t0 = actx.currentTime + i * (len + .1), o = actx.createOscillator(), g = actx.createGain();
+      o.type = 'sine'; o.frequency.value = freq; o.connect(g); g.connect(actx.destination);
+      g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(.25, t0 + .02); g.gain.exponentialRampToValueAtTime(.001, t0 + len);
+      o.start(t0); o.stop(t0 + len + .02);
+    }
+  } catch (e) {}
+}
+const buzz = p => { try { navigator.vibrate && navigator.vibrate(p); } catch (e) {} };
+
+let wl = null;
+async function wake() {
+  try {
+    if (S.settings.wake && S.timer.status === 'running' && 'wakeLock' in navigator && !wl && document.visibilityState === 'visible') {
+      wl = await navigator.wakeLock.request('screen'); wl.addEventListener('release', () => { wl = null; });
+    } else if ((!S.settings.wake || S.timer.status !== 'running') && wl) { wl.release(); wl = null; }
+  } catch (e) { wl = null; }
+}
+
+function timerStart() {
+  const t = S.timer; audio();
+  if (t.status === 'running') return;
+  if (t.status === 'done') { t.remaining = t.total; }
+  t.endAt = Date.now() + t.remaining; t.status = 'running'; syncWarned();
+  if (S.log.length === 0) addLog('Game started');
+  save(); wake(); tickUI(); renderTimerStatic();
+}
+function timerPause() { const t = S.timer; if (t.status !== 'running') return; t.remaining = remaining(); t.status = 'paused'; save(); wake(); tickUI(); renderTimerStatic(); }
+function timerReset() { const t = S.timer; t.status = 'idle'; t.remaining = t.total = S.settings.minutes * 60000; t.endAt = 0; syncWarned(); save(); wake(); tickUI(); renderTimerStatic(); }
+function timerAdjust(min) {
+  const t = S.timer, r = remaining();
+  const nr = Math.max(0, r + min * 60000);
+  if (t.status === 'running') t.endAt = Date.now() + nr; else t.remaining = nr;
+  if (nr > t.total) t.total = nr;
+  if (t.status === 'done' && nr > 0) t.status = 'paused';
+  syncWarned(); save(); tickUI(); renderTimerStatic();
+}
+function tick() {
+  const t = S.timer;
+  if (t.status === 'running') {
+    const r = remaining();
+    for (const th of TH) if (r <= th * 1000 && !t.warned[th]) { t.warned[th] = true; beep(th === 60 ? 3 : 2, th === 60 ? 988 : 784); buzz(200); }
+    if (r <= 0) { t.status = 'done'; t.remaining = 0; save(); beep(4, 660, .3); buzz([300, 120, 300, 120, 600]); addLog('Time called'); wake(); renderTimerStatic(); }
+  }
+  tickUI();
+}
+
+/* ---------- history ---------- */
+function snap() { return JSON.stringify({ round: S.round, phase: S.phase, players: S.players }); }
+// fn returns false when nothing changed, null for a change with no log line, or a string to log.
+function commit(fn) {
+  const before = snap(), logLen = S.log.length;
+  const text = fn();
+  if (text === false) return;
+  undoStack.push({ s: before, n: logLen }); if (undoStack.length > 200) undoStack.shift();
+  if (text) addLog(text);
+  save(); renderAll();
+}
+function undo() {
+  const u = undoStack.pop(); if (!u) return;
+  const o = JSON.parse(u.s); S.round = o.round; S.phase = o.phase; S.players = o.players; S.log.length = Math.min(S.log.length, u.n);
+  save(); renderAll();
+}
+function addLog(text) { S.log.push({ t: Date.now(), r: S.round, rem: remaining(), text }); if (S.log.length > 600) S.log.shift(); }
+
+/* ---------- squad data ---------- */
+let IDX = null;
+function idx() {
+  if (IDX) return IDX;
+  IDX = { p: {}, u: {} };
+  for (const [id, p] of Object.entries(D.pilots)) { (IDX.p[p.xs + '|' + p.x] ||= []).push(+id); (IDX.p['|' + p.x] ||= []).push(+id); }
+  for (const [id, u] of Object.entries(D.upgrades)) (IDX.u[u.x] ||= []).push(+id);
+  return IDX;
+}
+const upPoints = (u, ship) => {
+  let p = u.p; if (Array.isArray(p)) p = p[0];
+  return p || 0;
+};
+function makeShip(pid, upIds, unknown = []) {
+  const p = D.pilots[pid]; if (!p) return null;
+  const base = D.ships[p.sh] || {};
+  const ov = p.ov || {};
+  let hull = ov.hull ?? base.h ?? 0, sh = ov.shields ?? base.s ?? 0, fo = p.fo || 0;
+  const ups = [];
+  for (const id of upIds) {
+    const u = D.upgrades[id]; if (!u) continue;
+    if (u.x === 'hullupgrade') hull += 1;
+    if (u.x === 'shieldupgrade') sh += 1;
+    fo += u.fo || 0;
+    ups.push({ id: +id, n: u.n, s: u.s, p: upPoints(u), c: u.c || 0, cc: u.c || 0, t: u.t || '' });
+  }
+  const pts = Array.isArray(p.p) ? p.p[0] : p.p || 0;   // squad points are the pilot cost; upgrades spend loadout instead
+  const tok = {}; TOKENS.forEach(([k]) => tok[k] = 0);
+  return {
+    uid: uid(), pid: +pid, n: p.n, ship: p.sh, u: p.u, init: p.i ?? 0, pts, text: p.t || '',
+    atk: base.a ?? 0, agi: ov.agility ?? base.g ?? 0, actions: base.ac || [],
+    hull, hullMax: hull, sh, shMax: sh, ch: p.c || 0, chMax: p.c || 0, fo, foMax: fo, en: base.en || 0, enMax: base.en || 0,
+    ups, unknown, tok, dead: false, half: false, load: ups.reduce((a, u) => a + u.p, 0), lo: p.lo ?? null,
+  };
+}
+function parseYASB(raw) {
+  let s = raw.trim(); try { s = decodeURIComponent(s.replace(/\+/g, ' ')); } catch (e) {}
+  const m = /v(\d+)Z([a-z])Z(\d*)Z([0-9XYW]*)/.exec(s);
+  if (!m) return null;
+  const ver = +m[1];
+  if (ver < 9) return { error: 'This link comes from an older YASB version. Open it in YASB, then copy a fresh link.' };
+  if (m[2] === 'q') return { error: 'Quickbuild lists are not supported. Use a standard build, or import its XWS export.' };
+  const fm = /[?&]f=([^&#]+)/.exec(s), nm = /[?&]sn=([^&#]+)/.exec(s);
+  const ships = []; let skipped = 0;
+  for (const part of m[4].split('Y')) {
+    if (!part) continue;
+    const [pid, ups = ''] = part.split('X');
+    const sh = makeShip(pid, ups.split('W').filter(Boolean));
+    if (sh) ships.push(sh); else skipped++;
+  }
+  if (!ships.length) return { error: 'No ships found in that link.' };
+  const fac = canon(fm ? fm[1] : D.pilots[ships[0].pid].f);
+  return { squad: { name: nm ? nm[1].trim() : '', faction: FACTIONS[fac] ? fac : 'none', points: +m[3] || 0, ships, source: 'YASB' }, skipped };
+}
+function parseXWS(raw) {
+  let j; try { j = JSON.parse(raw); } catch (e) { return { error: 'That is not valid JSON.' }; }
+  if (!j || !Array.isArray(j.pilots)) return { error: 'No pilots found in that XWS data.' };
+  const I = idx(), ships = []; let skipped = 0;
+  for (const xp of j.pilots) {
+    const xs = canon(xp.ship), x = canon(xp.id);
+    const cands = (I.p[xs + '|' + x] || I.p['|' + x] || []).filter(Boolean);
+    const pid = cands.find(id => !/\(BoY\)/.test(D.pilots[id].n)) ?? cands[0];
+    if (pid == null) { skipped++; continue; }
+    const pf = canon(D.pilots[pid].f);
+    const ids = [], unknown = [];
+    for (const [type, list] of Object.entries(xp.upgrades || {})) {
+      for (const uxws of [].concat(list)) {
+        const key = canon(uxws), tk = canon(type).replace('forcepower', 'force');
+        const c = I.u[key] || [];
+        const f = c.filter(id => canon(D.upgrades[id].s) === tk);
+        const pool = f.length ? f : c;
+        const okFac = pool.filter(id => { const uf = D.upgrades[id].f; return !uf || [].concat(uf).some(x2 => canon(x2) === pf); });
+        const pick = (okFac.length ? okFac : pool)[0];
+        if (pick == null) unknown.push(uxws); else ids.push(pick);
+      }
+    }
+    const sh = makeShip(pid, ids, unknown); if (sh) ships.push(sh);
+  }
+  if (!ships.length) return { error: 'None of the pilots in that data could be matched.' };
+  const fac = canon(j.faction || D.pilots[ships[0].pid].f);
+  return { squad: { name: j.name || '', faction: FACTIONS[fac] ? fac : 'none', points: j.points || 0, ships, source: 'XWS' }, skipped };
+}
+function parseSquad(raw) {
+  raw = (raw || '').trim(); if (!raw) return null;
+  if (raw[0] === '{') return parseXWS(raw);
+  return parseYASB(raw) || { error: 'Could not read that. Paste a full YASB link (it contains d=v10Z…) or XWS JSON.' };
+}
+const squadCost = sq => sq.ships.reduce((a, s) => a + s.pts, 0);
+function exampleLink(faction) {
+  const find = (n, slot) => Object.entries(D.upgrades).find(([, u]) => u.n === n && (!slot || u.s === slot))?.[0] ?? '';
+  const pilot = (n, ship) => Object.entries(D.pilots).find(([, p]) => p.n === n && p.sh === ship && !/BoY/.test(n))?.[0];
+  if (faction === 'galacticempire') {
+    const a = pilot('Darth Vader', 'TIE Advanced x1'), b = pilot('Soontir Fel', 'TIE/in Interceptor'), c = pilot('Academy Pilot', 'TIE/ln Fighter');
+    return `https://yasb.app/?f=Galactic%20Empire&d=v10ZsZ50Z${a}X${find('Targeting Computer')}Y${b}X${find('Targeting Computer')}Y${c}X&sn=Example%20Imperial%20list`;
+  }
+  const a = pilot('Luke Skywalker', 'T-65 X-wing'), b = pilot('Biggs Darklighter', 'T-65 X-wing'), c = pilot('Red Squadron Veteran', 'T-65 X-wing');
+  return `https://yasb.app/?f=Rebel%20Alliance&d=v10ZsZ50Z${a}X${find('R2-D2', 'Astromech')}Y${b}X${find('Targeting Computer')}Y${c}X&sn=Example%20Rebel%20list`;
+}
+
+/* ---------- scoring ---------- */
+const hpNow = s => s.hull + s.sh;
+const maxHp = s => s.hullMax + s.shMax;
+// First time a ship is at half of its combined hull and shields, the opponent scores half its cost rounded down.
+// When it is destroyed they score the rest, so a destroyed ship is always worth its full cost.
+const sync = s => { if (!s.half && maxHp(s) > 0 && hpNow(s) * 2 <= maxHp(s)) s.half = true; };
+const shipState = s => (s.dead || s.hull <= 0) ? 'dead' : (s.half || (maxHp(s) > 0 && hpNow(s) * 2 <= maxHp(s))) ? 'half' : 'ok';
+const shipWorth = s => { const st = shipState(s); return st === 'dead' ? s.pts : st === 'half' ? Math.floor(s.pts / 2) : 0; };
+// If a squad is wiped out and was under the 50 point maximum, the opponent also scores the difference (the deficit).
+const LIST_MAX = 50;
+const fromShips = pi => {
+  const o = S.players[1 - pi].squad; if (!S.settings.auto || !o) return 0;
+  let t = o.ships.reduce((a, s) => a + shipWorth(s), 0);
+  if (o.ships.length && alive(o) === 0) t += Math.max(0, LIST_MAX - squadCost(o));
+  return t;
+};
+const total = pi => S.players[pi].manual + fromShips(pi);
+
+/* ---------- icons / text ---------- */
+const richText = t => esc(t).replace(/\{([^}]+)\}/g, '<span class="tg">$1</span>').replace(/\n/g, '<br>');
+const dots = (n, max, kind) => `<div class="dots ${kind}" aria-hidden="true">${Array.from({ length: Math.max(max, n) }, (_, i) => `<i class="${i < n ? 'on' : ''}"></i>`).join('')}</div>`;
+const stepper = (label, now, max, kind, attrs, note = '') => `
+  <div class="stat"><div class="top"><span class="label">${label}${note ? ` <em class="rec">${note}</em>` : ''}</span><span class="val">${now}<small> / ${max}</small></span></div>
+    <div class="step"><button data-act="${attrs.act}" ${attrs.d0} data-d="-1" aria-label="Lower ${label}" ${now <= 0 ? 'disabled' : ''}>−</button>${dots(now, max, kind)}<button data-act="${attrs.act}" ${attrs.d0} data-d="1" aria-label="Raise ${label}" ${now >= max ? 'disabled' : ''}>+</button></div></div>`;
+
+/* ---------- render ---------- */
+function renderTimerStatic() {
+  const t = S.timer, go = $('#tgo');
+  go.innerHTML = t.status === 'running'
+    ? '<svg class="ic" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg>Pause'
+    : '<svg class="ic" viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z" fill="currentColor"/></svg>' + (t.status === 'paused' ? 'Resume' : t.status === 'done' ? 'Restart' : 'Start');
+  const gb = $('#g-toggle');
+  gb.innerHTML = t.status === 'running' ? '<svg class="ic" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg>' : '<svg class="ic" viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z" fill="currentColor"/></svg>';
+  gb.setAttribute('aria-label', t.status === 'running' ? 'Pause timer' : 'Start timer');
+  $('#tbanner').hidden = t.status !== 'done';
+}
+function buildTicks() {
+  const total = S.timer.total / 60000, g = $('#ticks'); let h = '';
+  const step = total >= 30 ? 5 : 1;
+  for (let m = 0; m < total; m += step) {
+    const a = (m / total) * Math.PI * 2 - Math.PI / 2, major = m % 15 === 0, r1 = major ? 98 : 101, r2 = 108;
+    h += `<line class="tk ${major ? 'major' : ''}" x1="${(Math.cos(a) * r1).toFixed(1)}" y1="${(Math.sin(a) * r1).toFixed(1)}" x2="${(Math.cos(a) * r2).toFixed(1)}" y2="${(Math.sin(a) * r2).toFixed(1)}" stroke-width="${major ? 2.5 : 1.5}" stroke-linecap="round"/>`;
+  }
+  g.innerHTML = h; g.dataset.total = S.timer.total;
+}
+const C = 2 * Math.PI * 92;
+function tickUI() {
+  const t = S.timer, r = remaining();
+  if ($('#ticks').dataset.total != t.total) buildTicks();
+  const txt = fmt(r);
+  const level = t.status === 'done' ? 'done' : r <= 300000 && t.status !== 'idle' ? 'crit' : r <= 600000 && t.status !== 'idle' ? 'warn' : t.status;
+  $('#time').textContent = txt;
+  const gt = $('#g-time'); if (gt) gt.textContent = txt;
+  $('#glance').dataset.level = level;
+  const hud = $('#hud-time'); hud.textContent = txt; hud.className = 'num t ' + (level === 'warn' ? 'warn' : level === 'crit' || level === 'done' ? 'crit' : '');
+  $('#timer').dataset.level = level;
+  $('#tstate').textContent = { idle: 'Ready', running: 'Running', paused: 'Paused', done: 'Time called' }[t.status];
+  const frac = clamp(r / t.total, 0, 1), arc = (el) => { el.setAttribute('stroke-dasharray', `${(C * frac).toFixed(2)} ${C.toFixed(2)}`); el.setAttribute('transform', `rotate(${(-90 + (1 - frac) * 360).toFixed(2)})`); el.style.opacity = frac > 0 ? 1 : 0; };
+  arc($('#prog')); const gp = $('#g-prog'); if (gp) arc(gp);
+  const gs = $('#g-state'); if (gs) gs.textContent = { idle: 'Ready', running: 'Running', paused: 'Paused', done: 'Time called' }[t.status];
+  $('#tends').innerHTML = t.status === 'running' ? `Ends at <b>${clock(t.endAt)}</b>` : t.status === 'done' ? 'Finished' : `Ends at <b>${clock(Date.now() + r)}</b> if started now`;
+  const left = Math.max(1, S.settings.rounds - S.round + 1), per = r / left;
+  const el = $('#tpace');
+  el.innerHTML = t.status === 'done' ? '' : `<span class="pace ${per < 240000 ? 'tight' : ''}"><b>${fmt(per)}</b> per round left</span>`;
+}
+let scnOpen = false;
+function renderRound() {
+  const n = S.settings.rounds, el = $('#round'), t = S.settings.target;
+  const [pn, ph] = PHASES[S.phase], last = S.phase === PHASES.length - 1;
+  const sc = SCENARIOS[S.scenario], tot = [total(0), total(1)], ld = leader();
+  let status = '';
+  if (S.result) {
+    const r = S.result, w = r.winner;
+    status = `<div class="status win w${w}"><span>${w < 0 ? '<b>Draw</b>' : '<b>Victory: ' + esc(S.players[w].name) + '</b>'} · ${esc(reasonText(r))}</span><button class="btn sm" data-act="open" data-d="dlg-end">Summary</button></div>`;
+  } else if (ld >= 0 && tot[ld] >= t) {
+    status = `<div class="status pend"><span><b>${esc(S.players[ld].name)}</b> has ${tot[ld]} points. If they still lead at the end of the End Phase, they win.</span></div>`;
+  }
+  const scen = `<div class="scen"><div class="scen-row">
+      <select class="sel" id="scn" data-scn aria-label="Scenario"><option value="">Choose scenario</option>${Object.entries(SCENARIOS).map(([k, v]) => `<option value="${k}" ${k === S.scenario ? 'selected' : ''}>${esc(v.n)}</option>`).join('')}</select>
+      <a class="link" href="${rulesUrl(S.scenario)}" target="_blank" rel="noopener">${sc ? 'Scenario rules' : 'Common rules'} ↗</a></div>
+      ${sc ? `<details class="scen-d" ${scnOpen ? 'open' : ''}><summary>${esc(sc.setup)} · scores from round 2</summary><p class="txt"><b>Objective.</b> ${esc(sc.obj)}</p><p class="txt"><b>Scoring.</b> ${esc(sc.score)}</p></details>` : ''}</div>`;
+  const hint = last && sc && S.round >= 2 ? 'Score the scenario now. ' + sc.score : ph;
+  el.innerHTML = `
+    <div class="round-head"><h2>Round ${S.round} <small>of ${n}</small></h2><span class="label">${esc(pn)} phase · first to ${t}</span></div>
+    ${status}${scen}
+    <div class="pips ${n > 12 ? 'many' : ''}" role="group" aria-label="Jump to round">${Array.from({ length: n }, (_, i) => `<button class="pip ${i + 1 < S.round ? 'done' : i + 1 === S.round ? 'now' : ''}" data-act="round-set" data-d="${i + 1}" aria-label="Round ${i + 1}" ${i + 1 === S.round ? 'aria-current="step"' : ''}>${i + 1}</button>`).join('')}</div>
+    <div class="phases" role="group" aria-label="Phase">${PHASES.map(([p], i) => `<button class="phase ${i === S.phase ? 'now' : i < S.phase ? 'past' : ''}" data-act="phase-set" data-d="${i}">${p}</button>`).join('')}</div>
+    <p class="phase-hint">${esc(hint)}</p>
+    <div class="round-nav"><button class="btn" data-act="back" aria-label="Back one step">‹ Back</button>
+      <button class="btn primary" data-act="next">${last ? 'End of round: check victory ›' : 'Next phase: ' + PHASES[S.phase + 1][0] + ' ›'}</button></div>
+    <div class="round-foot"><button class="btn sm ghost" data-act="open" data-d="dlg-log">Game log</button><button class="btn sm ghost" data-act="end-now">End game</button></div>`;
+  $('#hud-round').textContent = S.round + '/' + n;
+}
+function renderGlance() {
+  const n = S.settings.rounds, t = S.settings.target, sc = SCENARIOS[S.scenario], P = S.players, tot = [total(0), total(1)];
+  const scores = [0, 1].map(i => {
+    const diff = tot[i] - tot[1 - i];
+    return `<div class="g-score" data-i="${i}"><div class="g-name"><span>${esc(P[i].name)}</span>${P[i].init ? '<em>Initiative</em>' : ''}</div>
+      <div class="num g-num">${tot[i]}</div>
+      <div class="g-meta"><span class="lead ${diff > 0 ? 'up' : diff < 0 ? 'down' : ''}">${diff === 0 ? 'Tied' : diff > 0 ? 'Ahead ' + diff : 'Behind ' + -diff}</span><span>${tot[i]} of ${t}</span></div>
+      <div class="g-track"><i style="width:${Math.min(100, tot[i] / t * 100)}%"></i></div></div>`;
+  }).join('');
+  const res = S.result ? ` · <b>${S.result.winner < 0 ? 'Draw' : 'Victory: ' + esc(P[S.result.winner].name)}</b>` : '';
+  const segs = Array.from({ length: n }, (_, i) => i + 1 < S.round ? '<i class="done"></i>' : i + 1 === S.round ? `<i><b style="width:${(S.phase + 1) / PHASES.length * 100}%"></b></i>` : '<i></i>').join('');
+  $('#glance-body').innerHTML = `
+    <div class="g-round"><div class="g-rl"><span class="label">Round</span><b>${S.round}<small> of ${n}</small></b></div>
+      <div class="g-rbar" role="progressbar" aria-label="Round progress" aria-valuemin="1" aria-valuemax="${n}" aria-valuenow="${S.round}">${segs}</div></div>
+    <div class="g-clock"><svg viewBox="-110 -110 220 220" aria-hidden="true"><circle class="gtrack" r="96" fill="none" stroke-width="10"/><circle class="gprog" id="g-prog" r="96" fill="none" stroke-width="10" stroke-linecap="round"/></svg>
+      <div class="g-face"><span class="num g-time" id="g-time">${fmt(remaining())}</span><span class="g-state" id="g-state"></span><button class="g-play" id="g-toggle" data-act="timer-toggle" aria-label="Start or pause timer"></button></div></div>
+    <div class="g-info">${esc(PHASES[S.phase][0])} phase${sc ? ' · ' + esc(sc.n) : ''}${res}</div>
+    <div class="g-scores">${scores}</div>`;
+  renderTimerStatic(); tickUI();
+}
+function setView(v) {
+  S.ui.view = v; document.body.dataset.view = v;
+  $('#glance').inert = v !== 'glance'; $('main').inert = v === 'glance'; $('.bar').inert = v === 'glance';
+  save(); if (v === 'glance') { renderGlance(); tickUI(); }
+}
+function shipHTML(pi, si, s) {
+  const st = shipState(s), open = OPEN.has(s.uid), worth = shipWorth(s);
+  const tokChips = TOKENS.filter(([k]) => s.tok[k]).map(([k, l]) => `<span class="chip">${l} ${s.tok[k]}</span>`).join('');
+  const head = `
+    <button class="s-head" data-act="ship-open" data-p="${pi}" data-s="${si}" aria-expanded="${open}">
+      <span class="initb">${s.init}</span>
+      <span style="min-width:0"><div class="s-name">${s.u ? '<i>●</i>' : ''}${esc(s.n)}</div>
+        <div class="s-sub">${esc(s.ship)}${s.ups.length ? ' · ' + esc(s.ups.map(u => u.n).join(', ')) : ''}${s.lo != null ? ' · loadout ' + s.load + '/' + s.lo : ''}</div>
+        <div class="chips"><span class="chip">${s.sh}<span style="color:var(--shield)">●</span> ${s.hull}<span style="color:var(--hull)">■</span></span>${st === 'half' ? `<span class="chip half">Half health · +${worth}</span>` : ''}${st === 'dead' ? `<span class="chip dead">Destroyed · +${worth}</span>` : ''}${tokChips}</div></span>
+      <span class="cost">${s.pts}</span>
+    </button>`;
+  if (!open) return `<article class="ship" data-state="${st}">${head}</article>`;
+  const A = (act, k) => ({ act, d0: `data-p="${pi}" data-s="${si}" data-k="${k}"` });
+  const body = `
+    <div class="s-body">
+      <div class="stat-grid">
+        ${s.shMax > 0 || s.sh > 0 ? stepper('Shields', s.sh, s.shMax, 'shield', A('hp', 'sh'), recNote((D.ships[s.ship] || {}).sr)) : ''}
+        ${stepper('Hull', s.hull, s.hullMax, 'hull', A('hp', 'hull'))}
+        ${s.chMax ? stepper('Charges', s.ch, s.chMax, 'charge', A('res', 'ch'), recNote((D.pilots[s.pid] || {}).r)) : ''}
+        ${s.foMax ? stepper('Force', s.fo, s.foMax, 'force', A('res', 'fo'), forceRate(s) ? recNote(forceRate(s)) : 'no recovery') : ''}
+        ${s.enMax ? stepper('Energy', s.en, s.enMax, 'charge', A('res', 'en'), recNote((D.ships[s.ship] || {}).er)) : ''}
+      </div>
+      <p class="txt"><span class="label">ATK ${s.atk} · AGI ${s.agi}</span>${s.actions.length ? ' · ' + esc(s.actions.map(a => a.replace(/^R-/, '')).join(', ')) : ''}</p>
+      ${s.text ? `<p class="txt">${richText(s.text)}</p>` : ''}
+      ${s.ups.map((u, ui) => `<div class="up"><div class="u-top"><span class="u-n">${esc(u.n)}<small>${esc(u.s)}${u.cc && recNote((D.upgrades[u.id] || {}).r) ? ' · charges ' + recNote((D.upgrades[u.id] || {}).r) : ''}</small></span><span class="u-c">${u.p}</span></div>
+          ${u.t ? `<p class="txt">${richText(u.t)}</p>` : ''}
+          ${u.cc ? `<div class="step"><button data-act="up-ch" data-p="${pi}" data-s="${si}" data-u="${ui}" data-d="-1" aria-label="Spend charge" ${u.c <= 0 ? 'disabled' : ''}>−</button>${dots(u.c, u.cc, 'charge')}<button data-act="up-ch" data-p="${pi}" data-s="${si}" data-u="${ui}" data-d="1" aria-label="Recover charge" ${u.c >= u.cc ? 'disabled' : ''}>+</button></div>` : ''}</div>`).join('')}
+      ${s.unknown.length ? `<p class="txt">Not found in the card data: ${esc(s.unknown.join(', '))}</p>` : ''}
+      <span class="label sub-h">Tokens</span>
+      <div class="toks">${TOKENS.map(([k, l]) => `<div class="tok ${s.tok[k] ? 'has' : ''}"><button data-act="tok" data-p="${pi}" data-s="${si}" data-k="${k}" data-d="-1" aria-label="Remove ${l}">−</button><span>${l}<b>${s.tok[k]}</b></span><button data-act="tok" data-p="${pi}" data-s="${si}" data-k="${k}" data-d="1" aria-label="Add ${l}">+</button></div>`).join('')}</div>
+      <div class="s-actions">
+        <button class="btn sm ${s.dead ? '' : 'danger'}" data-act="dead" data-p="${pi}" data-s="${si}">${s.dead ? 'Restore ship' : 'Mark destroyed'}</button>
+        <button class="btn sm ghost" data-act="max" data-p="${pi}" data-s="${si}" data-k="hull" data-d="1">Hull max +</button>
+        <button class="btn sm ghost" data-act="max" data-p="${pi}" data-s="${si}" data-k="hull" data-d="-1">−</button>
+        <button class="btn sm ghost" data-act="max" data-p="${pi}" data-s="${si}" data-k="sh" data-d="1">Shield max +</button>
+        <button class="btn sm ghost" data-act="max" data-p="${pi}" data-s="${si}" data-k="sh" data-d="-1">−</button>
+      </div>
+    </div>`;
+  return `<article class="ship" data-state="${st}">${head}${body}</article>`;
+}
+function renderPlayer(pi) {
+  const p = S.players[pi], f = FACTIONS[p.faction] || FACTIONS.none, sc = total(pi), oc = total(1 - pi), auto = fromShips(pi);
+  const diff = sc - oc;
+  const lead = diff === 0 ? '<span class="lead">Tied</span>' : diff > 0 ? `<span class="lead up">Ahead ${diff}</span>` : `<span class="lead down">Behind ${-diff}</span>`;
+  const sq = p.squad;
+  const alive = sq ? sq.ships.filter(s => shipState(s) !== 'dead').length : 0, col = !!S.ui.collapsed[pi];
+  const squad = sq ? `
+    <div class="squad">
+      <div class="sq-head"><button class="sq-toggle" data-act="sq-fold" data-p="${pi}" aria-expanded="${!col}" aria-label="${col ? 'Expand' : 'Collapse'} squad"><svg class="ic" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg><span class="t"><b>${esc(sq.name || 'Squad')}</b><span><span class="fdot" style="background:${f.c}"></span> ${esc(f.n)} · ${squadCost(sq)}${sq.points ? ' / ' + sq.points : ''} pts · ${alive} of ${sq.ships.length} ships flying</span></span></button>
+        ${col ? '' : `<div class="sq-actions"><button class="btn sm" data-act="imp-open" data-p="${pi}">Replace</button><button class="btn sm ghost" data-act="list-save" data-p="${pi}">Save list</button><button class="btn sm ghost" data-act="heal" data-p="${pi}">Repair all</button><button class="btn sm ghost" data-act="sq-clear" data-p="${pi}">Remove</button></div>`}</div>
+      ${col ? `<div class="sq-mini">${sq.ships.map(s => `<span class="mini ${shipState(s)}">${esc(s.n.replace(/^["“”]|["“”]$/g, ''))} <b>${s.sh}<i style="color:var(--shield);font-style:normal">●</i> ${s.hull}<i style="color:var(--hull);font-style:normal">■</i></b></span>`).join('')}</div>` : sq.ships.map((s, si) => shipHTML(pi, si, s)).join('')}
+    </div>` : `
+    <div class="squad"><div class="empty"><p>Import a list from Yet Another Squad Builder to track hull, shields, charges and points per ship.</p>
+      <button class="btn primary" data-act="imp-open" data-p="${pi}"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v3h16v-3"/></svg>Import squad</button></div></div>`;
+  return `
+  <section class="card player" data-i="${pi}" aria-label="${esc(p.name)}">
+    <div class="ph"><span class="dot"></span>
+      <input class="name-in" data-name="${pi}" value="${esc(p.name)}" maxlength="24" aria-label="Player name" autocomplete="off">
+      <span class="fbadge ${sq ? '' : 'none'}"><span class="fdot" style="background:${f.c}"></span>${sq ? esc(f.n) : 'No list loaded'}</span>
+      <button class="init" data-act="init" data-p="${pi}" aria-pressed="${p.init}">Initiative</button></div>
+    <div class="scorebox">
+      <div class="sc-top"><div class="num score" data-score="${pi}" aria-label="Score">${sc}</div>
+        <div class="sc-side">${lead}<span class="split">Manual <b>${p.manual}</b>${S.settings.auto ? ` · Ships <b>${auto}</b>` : ''}</span></div></div>
+      <div class="pad" role="group" aria-label="Add points">${[1, 2, 5].map(d => `<button class="pbtn plus" data-act="score" data-p="${pi}" data-d="${d}" aria-label="Add ${d}">+${d}</button>`).join('')}
+        ${[1, 2, 5].map(d => `<button class="pbtn minus" data-act="score" data-p="${pi}" data-d="${-d}" aria-label="Remove ${d}">−${d}</button>`).join('')}</div>
+    </div>${squad}
+  </section>`;
+}
+const lastScores = [null, null];
+function renderPlayers() {
+  const keep = document.activeElement && document.activeElement.dataset.name;
+  if (keep != null && document.activeElement.tagName === 'INPUT') return;
+  $('#players').innerHTML = renderPlayer(0) + renderPlayer(1);
+  [0, 1].forEach(i => {
+    const sc = total(i), el = $(`[data-score="${i}"]`);
+    if (lastScores[i] !== null && lastScores[i] !== sc && el) el.classList.add('bump');
+    lastScores[i] = sc;
+    $('#hud-s' + (i + 1)).textContent = sc;
+  });
+}
+function renderAll() {
+  renderRound(); renderPlayers(); renderGlance(); renderTimerStatic(); tickUI();
+  $('#undo').disabled = !undoStack.length;
+  $('#foot').textContent = `Card data from YASB ${D.v}, built ${D.built || ''}. Pilot and upgrade stats come from there.`;
+  if ($('#dlg-set').open) renderSettings();
+  if ($('#dlg-end').open && !(document.activeElement && document.activeElement.id === 'end-notes')) renderEnd();
+  if ($('#dlg-hist').open) renderHistory();
+  if ($('#dlg-log').open) renderLog();
+}
+function renderLog() {
+  const l = $('#log-list');
+  l.innerHTML = S.log.length ? S.log.slice().reverse().map(e => `<div class="li"><span class="r">R${e.r}</span><span class="tm">${fmt(e.rem)}</span><span>${esc(e.text)}</span></div>`).join('') : '<p class="msg">Nothing yet. Score changes, rounds and damage appear here.</p>';
+}
+function openEnd() { renderEnd(); const d = $('#dlg-end'); if (!d.open) d.showModal(); }
+function renderEnd() {
+  const P = S.players, r = S.result; if (!r) return;
+  const w = r.winner, me = S.settings.me, sc = SCENARIOS[S.scenario];
+  $('#end-body').innerHTML = `
+    <div class="result">${[0, 1].map(i => `<div class="res ${w === i ? 'win' : ''}" data-i="${i}"><span class="label">${esc(P[i].name)}</span><span class="big num">${total(i)}</span><span class="split">${esc((FACTIONS[P[i].faction] || FACTIONS.none).n)}</span><span class="split">Manual <b>${P[i].manual}</b> · Ships <b>${fromShips(i)}</b></span></div>`).join('')}</div>
+    <div class="verdict">${w < 0 ? 'Draw' : esc(P[w].name) + ' wins'}<small>${esc(reasonText(r))} · Round ${S.round} of ${S.settings.rounds} · ${sc ? esc(sc.n) : 'No scenario chosen'}</small></div>
+    <div class="field"><span class="label">Winner</span><div class="seg" role="group">${[0, -1, 1].map(i => `<button data-act="res-win" data-d="${i}" aria-pressed="${w === i}">${i < 0 ? 'Draw' : esc(P[i].name)}</button>`).join('')}</div></div>
+    <div class="field"><span class="label">I played as</span><div class="seg" role="group">${[[0, esc(P[0].name)], [1, esc(P[1].name)], [-1, 'Neither']].map(([v, l]) => `<button data-act="res-me" data-d="${v}" aria-pressed="${me === v}">${l}</button>`).join('')}</div></div>
+    <label class="field" for="end-notes"><span class="label">Notes</span><input type="text" id="end-notes" class="txt-in" maxlength="140" placeholder="Optional, for example what decided the game" value="${esc(r.notes || '')}" autocomplete="off"></label>
+    <div class="setrow"><div>Save to history<small>Keeps both lists, the result and the scenario for the stats.</small></div><button class="switch" role="switch" data-act="res-save" aria-checked="${r.save !== false}" aria-label="Save to history"></button></div>
+    <div class="chipset"><button class="btn primary" data-act="new-game" data-d="keep">Finish, keep squads</button><button class="btn" data-act="new-game" data-d="clear">Finish, clear squads</button><button class="btn ghost" data-act="keep-playing">Keep playing</button></div>`;
+}
+function renderSettings() {
+  const s = S.settings;
+  const sw = (id, on, label, sub) => `<div class="setrow"><div>${label}<small>${sub}</small></div><button class="switch" role="switch" data-act="set-toggle" data-d="${id}" aria-checked="${on}" aria-label="${esc(label)}"></button></div>`;
+  $('#set-body').innerHTML = `
+    <div class="field"><span class="label">Game length</span>
+      <div class="chipset">${[60, 75, 90, 120].map(m => `<button class="btn" data-act="set-min" data-d="${m}" aria-pressed="${s.minutes === m}">${m} min</button>`).join('')}
+        <input type="number" id="min-in" min="5" max="240" value="${s.minutes}" aria-label="Custom minutes"><button class="btn sm" data-act="set-min-in">Set</button></div></div>
+    <div class="field"><span class="label">Rounds</span>
+      <div class="chipset"><input type="number" id="rounds-in" min="1" max="30" value="${s.rounds}" aria-label="Number of rounds"><button class="btn sm" data-act="set-rounds">Set</button></div></div>
+    <div class="field"><span class="label">Game ends at</span>
+      <div class="chipset"><input type="number" id="target-in" min="10" max="200" value="${s.target}" aria-label="Winning score"><span class="txt">points, checked at the end of the End Phase</span><button class="btn sm" data-act="set-target">Set</button></div></div>
+    ${sw('sound', s.sound, 'Sound alerts', 'Beeps at 10, 5 and 1 minute and when time is called.')}
+    ${sw('wake', s.wake, 'Keep screen awake', 'While the timer runs, where the device allows it.')}
+    ${sw('auto', s.auto, 'Score from ship damage', 'Opponent scores half the cost (rounded down) when a ship first drops to half hull and shields, and the rest when it is destroyed.')}
+    <div class="field"><span class="label">Shortcuts</span><div class="keys"><kbd>Space</kbd><span>Start or pause the timer</span><kbd>→ / ←</kbd><span>Next or previous step</span><kbd>Z</kbd><span>Undo</span><kbd>G</kbd><span>At a glance screen</span></div></div>
+    <button class="btn danger" data-act="reset-all" id="reset-all">Reset everything</button>`;
+}
+function renderImport() {
+  $('#imp-target').innerHTML = S.players.map((p, i) => `<button data-act="imp-target" data-p="${i}" aria-pressed="${impTarget === i}">${esc(p.name)}</button>`).join('');
+  const sel = $('#imp-saved'), byF = {};
+  H.lists.forEach(l => (byF[l.faction] ||= []).push(l));
+  sel.innerHTML = `<option value="">${H.lists.length ? 'Choose a saved list' : 'No saved lists yet'}</option>` + Object.keys(byF).map(f => `<optgroup label="${esc((FACTIONS[f] || FACTIONS.none).n)}">${byF[f].map(l => `<option value="${l.id}">${esc(l.name)} · ${l.points} pts</option>`).join('')}</optgroup>`).join('');
+  sel.disabled = !H.lists.length; sel.value = impSelId;
+  const raw = $('#imp-text').value, out = $('#imp-out'), go = $('#imp-go');
+  impParsed = null; go.disabled = true;
+  let r;
+  if (impSelId && impSel) r = { squad: impSel };
+  else { if (!raw.trim()) { out.innerHTML = ''; return; } r = parseSquad(raw); }
+  if (!r) { out.innerHTML = ''; return; }
+  if (r.error) { out.innerHTML = `<div class="msg err">${esc(r.error)}</div>`; return; }
+  impParsed = r.squad; go.disabled = false;
+  const sq = r.squad, F = FACTIONS[sq.faction] || FACTIONS.none;
+  out.innerHTML = `<div class="msg ok">Found ${sq.ships.length} ship${sq.ships.length > 1 ? 's' : ''} · ${F.n} · ${squadCost(sq)}${sq.points ? ' of ' + sq.points : ''} squad points${r.skipped ? ` · ${r.skipped} pilot(s) skipped` : ''}</div>
+    <div class="preview">${sq.ships.map(s => `<div class="pv"><span>${esc(s.n)}<small>${esc(s.ship)}${s.ups.length ? ' · ' + esc(s.ups.map(u => u.n).join(', ')) : ''}${s.lo != null && s.ups.length ? ' · loadout ' + s.load + '/' + s.lo : ''}</small></span><b class="num">${s.pts}</b></div>`).join('')}</div>`;
+  go.textContent = 'Load into ' + S.players[impTarget].name;
+}
+let impTarget = 0, impParsed = null, impSel = null, impSelId = '';
+
+/* ---------- history screens ---------- */
+const HV = { tab: 'matches', fac: 'all', scope: 'all', drill: {}, upSlot: '' };
+function loadSample() {
+  const smp = window.XW_SAMPLE; if (!smp) return null; let m = 0, l = 0;
+  smp.matches.forEach(x => { if (!H.matches.some(y => y.id === x.id)) { H.matches.push(JSON.parse(JSON.stringify(x))); m++; } });
+  smp.lists.forEach(x => { if (!H.lists.some(y => y.sig === x.sig)) { H.lists.push(JSON.parse(JSON.stringify(x))); l++; } });
+  H.matches.sort((a, b) => b.t - a.t); H.mig2 = 1; saveH();
+  if (H.matches[0]) HOPEN.add(H.matches[0].id);
+  return { m, l };
+}
+const HOPEN = new Set();
+const fName = f => (FACTIONS[f] || FACTIONS.none).n;
+const fDot = f => `<span class="fdot" style="background:${(FACTIONS[f] || FACTIONS.none).c}"></span>`;
+const pct = (a, b) => Math.round(100 * a / Math.max(1, b));
+const dateStr = t => new Date(t).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
+function facChips() {
+  const fs = [...new Set(H.matches.flatMap(m => m.p.map(p => p.faction)).concat(H.lists.map(l => l.faction)))];
+  return `<div class="chipset"><button class="btn sm" data-act="h-fac" data-d="all" aria-pressed="${HV.fac === 'all'}">All factions</button>${fs.map(f => `<button class="btn sm" data-act="h-fac" data-d="${f}" aria-pressed="${HV.fac === f}">${fDot(f)}${esc(fName(f))}</button>`).join('')}</div>`;
+}
+const sampleBtns = () => window.XW_SAMPLE ? `<div class="chipset"><button class="btn sm" data-act="h-sample">Load 5 sample matches</button>${H.matches.some(m => m.sample) || H.lists.some(l => l.sample) ? '<button class="btn sm ghost" data-act="h-unsample">Remove sample data</button>' : ''}</div>` : '';
+const emptyHist = txt => `<div class="empty"><p>${txt}</p>${sampleBtns()}</div>`;
+const upCostOf = u => { const d = D.upgrades[u.id]; const p = d ? d.p : 0; return Array.isArray(p) ? p[0] : (p || 0); };
+function squadBlock(sq) {
+  if (!sq) return '<p class="txt">No list was loaded for this side.</p>';
+  return `<div class="sqb">${sq.ships.map(s => {
+    const lo = (D.pilots[s.pid] || {}).lo, load = s.ups.reduce((a, u) => a + upCostOf(u), 0);
+    return `<div class="ln"><span>${esc(s.n)}<small>${esc(s.ship)} · initiative ${s.init}${lo != null ? ' · loadout ' + load + '/' + lo : ''}</small>${s.ups.length ? `<small>${esc(s.ups.map(u => u.n + ' (' + upCostOf(u) + ')').join(', '))}</small>` : ''}${s.end && s.end !== 'ok' ? `<small>${s.end === 'dead' ? 'Destroyed' : 'Reached half health'}</small>` : ''}</span><b>${s.pts}</b></div>`;
+  }).join('')}</div>`;
+}
+function hMatches() {
+  if (!H.matches.length) return emptyHist('No matches saved yet. When a game ends, leave "Save to history" on and choose Finish.');
+  const ms = H.matches.filter(m => HV.fac === 'all' || m.p.some(p => p.faction === HV.fac));
+  return facChips() + (ms.length ? `<div class="list-stack">${ms.map(m => {
+    const open = HOPEN.has(m.id), sc = SCENARIOS[m.scenario], side = (i, r) => `<div class="side s${i} ${r ? 'r' : ''} ${m.winner === i ? 'won' : ''}"><span class="nm"><i></i>${esc(m.p[i].name)}</span><small>${esc(fName(m.p[i].faction))}${m.p[i].squad ? ' · ' + m.p[i].squad.cost + ' pts' : ''}</small></div>`;
+    return `<article class="match"><button class="m-head" data-act="h-open" data-d="${m.id}" aria-expanded="${open}">
+      <div class="m-meta"><span>${dateStr(m.t)}</span><span>${sc ? esc(sc.n) : 'No scenario'}</span><span>Round ${m.round}</span>${m.sample ? '<span class="chip">Sample</span>' : ''}<span>${m.winner < 0 ? 'Draw' : esc(m.p[m.winner].name) + ' won'}</span>${m.me >= 0 ? `<span class="chip">I played ${esc(m.p[m.me].name)}</span>` : ''}</div>
+      <div class="m-score">${side(0, false)}<span class="sc num">${m.p[0].score}<span class="dash"> – </span>${m.p[1].score}</span>${side(1, true)}</div></button>
+      ${open ? `<div class="m-body">${[0, 1].map(i => `<div><span class="label">${esc(m.p[i].name)} · ${esc(fName(m.p[i].faction))}${m.p[i].squad ? ' · ' + m.p[i].squad.cost + ' squad points' : ''} · scored ${m.p[i].score} (mission ${m.p[i].manual}, ships ${m.p[i].ships})</span>${squadBlock(m.p[i].squad)}</div>`).join('')}
+        <p class="txt">${m.reason === 'target' ? 'Won on reaching the target score' : m.reason === 'elimination' ? 'Ended when one side had no ships left' : m.reason === 'rounds' ? 'Went the full number of rounds' : 'Ended manually'} · round ${m.round} · ${Math.round(m.usedMs / 60000)} minutes played</p>
+        ${m.notes ? `<p class="txt"><b>Notes.</b> ${esc(m.notes)}</p>` : ''}<div class="s-actions"><button class="btn sm danger" data-act="h-del" data-d="${m.id}">Delete match</button></div></div>` : ''}</article>`;
+  }).join('')}</div>` : emptyHist('No matches for that faction yet.'));
+}
+function hLists() {
+  if (!H.lists.length) return emptyHist('No saved lists yet. Lists are saved automatically when you finish a match, or tap Save list on a squad.');
+  const rows = H.lists.filter(l => HV.fac === 'all' || l.faction === HV.fac), P = S.players;
+  const by = {}; rows.forEach(l => (by[l.faction] ||= []).push(l));
+  const order = Object.keys(FACTIONS).filter(f => by[f]);
+  return facChips() + order.map(f => {
+    const tot = by[f].reduce((a, l) => { const r = recordOf(l.sig); a.w += r.w; a.l += r.l; a.d += r.d; return a; }, { w: 0, l: 0, d: 0 });
+    return `<h4 class="grp">${fDot(f)}${esc(fName(f))} <small>${by[f].length} list${by[f].length > 1 ? 's' : ''} · record ${tot.w}–${tot.l}${tot.d ? '–' + tot.d : ''}</small></h4>
+      <div class="list-stack">${by[f].map(l => { const r = recordOf(l.sig);
+        return `<article class="match"><div class="m-head"><input class="name-in sm" data-lname="${l.id}" value="${esc(l.name)}" maxlength="40" aria-label="List name" autocomplete="off">
+          <div class="m-meta"><span>${l.points} pts</span><span>${l.ships.length} ship${l.ships.length > 1 ? 's' : ''}</span><span>Record <span class="rec">${r.w}–${r.l}${r.d ? '–' + r.d : ''}</span></span><span>${dateStr(l.saved)}</span>${l.sample ? '<span class="chip">Sample</span>' : ''}</div></div>
+          <div class="m-body"><div class="sqb">${l.ships.map(x => { const p = D.pilots[x.pid]; return p ? `<div class="ln"><span>${esc(p.n)}<small>${esc(p.sh)}${x.ups.length ? ' · ' + esc(x.ups.map(u => (D.upgrades[u] || {}).n || '?').join(', ')) : ''}</small></span></div>` : ''; }).join('')}</div>
+          <div class="s-actions"><button class="btn sm primary" data-act="list-use" data-d="${l.id}" data-p="0">Use as ${esc(P[0].name)}</button><button class="btn sm" data-act="list-use" data-d="${l.id}" data-p="1">Use as ${esc(P[1].name)}</button><button class="btn sm danger" data-act="list-del" data-d="${l.id}">Delete</button></div></div></article>`; }).join('')}</div>`;
+  }).join('');
+}
+function entries() {
+  const out = [], d = HV.drill;
+  H.matches.forEach(m => m.p.forEach((p, i) => {
+    if (!p.squad) return;
+    const e = { m, i, f: p.faction, opp: m.p[1 - i].faction, res: m.winner === i ? 'w' : m.winner === -1 ? 'd' : 'l', score: p.score, squad: p.squad };
+    if (HV.fac !== 'all' && e.f !== HV.fac) return;
+    if (HV.scope === 'mine' && m.me !== i) return;
+    const sh = p.squad.ships;
+    if (d.pid != null && !sh.some(s => s.pid === d.pid)) return;
+    if (d.ship && !sh.some(s => s.ship === d.ship)) return;
+    if (d.up && !sh.some(s => s.ups.some(u => u.n === d.up))) return;
+    if (d.slot && !sh.some(s => s.ups.some(u => u.s === d.slot))) return;
+    if (d.scn && m.scenario !== d.scn) return;
+    if (d.sig && p.squad.sig !== d.sig) return;
+    if (d.opp && e.opp !== d.opp) return;
+    out.push(e);
+  }));
+  return out;
+}
+// With a pilot, ship or upgrade filter active, only the matching ships feed the tables, so upgrades show what that pilot carries and pilots show who carries that upgrade.
+const shipsOfE = e => { const d = HV.drill; return e.squad.ships.filter(s => (d.pid == null || s.pid === d.pid) && (!d.ship || s.ship === d.ship) && (!d.up || s.ups.some(u => u.n === d.up)) && (!d.slot || s.ups.some(u => u.s === d.slot))); };
+function agg(es, keys) {
+  const M = new Map();
+  es.forEach(e => { const seen = new Set(); keys(e).forEach(k => {
+    let r = M.get(k.id); if (!r) { r = { id: k.id, label: k.label, sub: k.sub, slot: k.slot, n: 0, w: 0, l: 0, d: 0, down: 0, lists: 0 }; M.set(k.id, r); }
+    r.n++; if (k.down) r.down++;
+    if (!seen.has(k.id)) { seen.add(k.id); r.lists++; r[e.res]++; }
+  }); });
+  return [...M.values()].sort((a, b) => b.n - a.n || b.w - a.w);
+}
+function irow(r, k, v, lost) {
+  const p = pct(r.w, r.lists);
+  return `<button class="hrow" data-act="drill" data-k="${k}" data-v="${esc(v)}"><span class="nm">${esc(r.label)}${r.sub || (lost && r.down) ? `<small>${esc(r.sub || '')}${lost && r.down ? (r.sub ? ' · ' : '') + lost + ' ' + r.down + '×' : ''}</small>` : ''}</span><span class="v">${r.n}</span><span class="v">${r.w}–${r.l}${r.d ? '–' + r.d : ''}</span><span class="pct"><b>${p}%</b><i class="bar2"><i style="width:${p}%"></i></i></span></button>`;
+}
+const hhead = (a) => `<div class="hrow hh"><span>${a}</span><span style="text-align:right">Used</span><span style="text-align:right">W–L</span><span style="text-align:right">Win</span></div>`;
+let HFOLD = new Set(); try { HFOLD = new Set(JSON.parse(localStorage.getItem('xwdash.hfold') || '[]')); } catch (e) {}
+function section(key, title, note, rows, head, extra = '') {
+  if (!rows.length) return '';
+  const open = !HFOLD.has(key);
+  return `<div class="sec-h"><button class="sec-t" data-act="h-fold" data-d="${key}" aria-expanded="${open}"><svg class="ic" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg><h4>${title}</h4></button><small>${note}</small></div>${open ? `${extra}<div class="list-stack">${hhead(head)}${rows.join('')}</div>` : ''}`;
+}
+function hInsights() {
+  if (!H.matches.some(m => m.p.some(p => p.squad))) return emptyHist('Stats appear once you have saved matches with lists loaded.');
+  const hasMine = H.matches.some(m => m.me >= 0), d = HV.drill;
+  const es = entries();
+  const chips = Object.entries(d).filter(([, v]) => v != null).map(([k, v]) => {
+    const lab = k === 'pid' ? (D.pilots[v] || {}).n : k === 'scn' ? (SCENARIOS[v] || {}).n : k === 'opp' ? 'vs ' + fName(v) : k === 'slot' ? v + ' slot' : k === 'sig' ? ((H.lists.find(l => l.sig === v) || {}).name || 'List') : v;
+    return `<button class="btn sm" data-act="drill-clear" data-k="${k}" aria-label="Remove filter">${esc(lab || v)} ✕</button>`;
+  }).join('');
+  const controls = `${facChips()}${hasMine ? `<div class="seg" role="group"><button data-act="h-scope" data-d="all" aria-pressed="${HV.scope === 'all'}">Both sides</button><button data-act="h-scope" data-d="mine" aria-pressed="${HV.scope === 'mine'}">Only my lists</button></div>` : ''}${chips ? `<div class="chipset"><span class="label">Filtered by</span>${chips}</div>` : ''}`;
+  if (!es.length) return controls + emptyHist('No lists match these filters.');
+  const w = es.filter(e => e.res === 'w').length, ships = es.flatMap(e => shipsOfE(e)), lost = ships.filter(s => s.end === 'dead').length;
+  const nUp = ships.reduce((a, s) => a + s.ups.length, 0);
+  const tiles = `<div class="tiles"><div class="tile"><b>${es.length}</b><span>lists flown</span></div><div class="tile"><b>${pct(w, es.length)}%</b><span>win rate (${w} of ${es.length})</span></div><div class="tile"><b>${(es.reduce((a, e) => a + e.score, 0) / es.length).toFixed(1)}</b><span>average score</span></div><div class="tile"><b>${pct(lost, ships.length)}%</b><span>of ships destroyed</span></div><div class="tile"><b>${ships.length ? (nUp / ships.length).toFixed(1) : '0'}</b><span>upgrades per ship</span></div><div class="tile"><b>${(es.reduce((a, e) => a + e.squad.cost, 0) / es.length).toFixed(1)}</b><span>average squad points</span></div><div class="tile"><b>${(es.reduce((a, e) => a + e.m.p[e.i].manual, 0) / es.length).toFixed(1)} / ${(es.reduce((a, e) => a + e.m.p[e.i].ships, 0) / es.length).toFixed(1)}</b><span>mission / ship points per game</span></div></div>`;
+  const top = (arr, n = 12) => arr.slice(0, n);
+  const pilots = agg(es, e => shipsOfE(e).map(s => ({ id: s.pid, label: s.n, sub: s.ship + ' · ' + s.pts + ' pts', down: s.end === 'dead' })));
+  const shipsA = agg(es, e => shipsOfE(e).map(s => ({ id: s.ship, label: s.ship, sub: '', down: s.end === 'dead' })));
+  const ups = agg(es, e => shipsOfE(e).flatMap(s => s.ups.map(u => ({ id: u.n, label: u.n, sub: u.s + ' · ' + upCostOf(u) + ' loadout', slot: u.s, down: s.end === 'dead' }))));
+  const slots = agg(es, e => shipsOfE(e).flatMap(s => s.ups.map(u => ({ id: u.s, label: u.s, sub: '', down: s.end === 'dead' }))));
+  const combos = agg(es, e => shipsOfE(e).flatMap(s => s.ups.map(u => ({ id: s.pid + '|' + u.n, label: s.n + ' with ' + u.n, sub: s.ship, down: s.end === 'dead' })))).filter(r => r.n > 1 || es.length < 6);
+  const mu = agg(es, e => [{ id: e.f + '|' + e.opp, label: fName(e.f) + ' vs ' + fName(e.opp), sub: '' }]);
+  const scn = agg(es, e => [{ id: e.m.scenario || '', label: (SCENARIOS[e.m.scenario] || {}).n || 'No scenario', sub: '' }]);
+  const lists = agg(es, e => [{ id: e.squad.sig, label: e.squad.name || 'Squad', sub: fName(e.f) + ' · ' + e.squad.cost + ' pts · ' + e.squad.ships.length + ' ships' }]);
+  const scope = (d.pid != null || d.ship || d.up || d.slot) ? ' Showing only the ships that match your filter.' : '';
+  if (HV.upSlot && !slots.some(r => r.id === HV.upSlot)) HV.upSlot = '';
+  const upsShown = HV.upSlot ? ups.filter(r => r.slot === HV.upSlot) : ups;
+  const slotChips = `<div class="chipset"><span class="label">Type</span><button class="btn sm" data-act="h-slot" data-d="" aria-pressed="${!HV.upSlot}">All types</button>${slots.map(r => `<button class="btn sm" data-act="h-slot" data-d="${esc(r.id)}" aria-pressed="${HV.upSlot === r.id}">${esc(r.label)} ${r.n}</button>`).join('')}</div>`;
+  return controls + tiles
+    + section('lists', 'Your lists', 'Each list with its record. Tap one to see only its games.', top(lists, 10).map(r => irow(r, 'sig', r.id, '')), 'List')
+    + section('pilots', 'Pilots', 'Tap a row to see what that pilot carries.' + scope, top(pilots).map(r => irow(r, 'pid', r.id, 'destroyed')), 'Pilot')
+    + section('ships', 'Ships', 'Chassis flown across the lists.' + scope, top(shipsA).map(r => irow(r, 'ship', r.id, 'destroyed')), 'Ship')
+    + section('upgrades', 'Upgrades', `${upsShown.length} different upgrades${HV.upSlot ? ' in ' + esc(HV.upSlot) : ''}. Tap one to see which pilots carry it.`, top(upsShown, 25).map(r => irow(r, 'up', r.id, 'carrier lost')), 'Upgrade', slotChips)
+    + section('pairs', 'Pilot and upgrade pairs', 'Combinations used more than once.', top(combos, 12).map(r => irow(r, 'pid', r.id.split('|')[0], 'carrier lost')), 'Combination')
+    + section('scenarios', 'Scenarios', 'How these lists did in each scenario.', top(scn).map(r => irow(r, 'scn', r.id, '')), 'Scenario')
+    + section('matchups', 'Faction matchups', 'Tap to see those games only.', top(mu).map(r => irow(r, 'mu', r.id, '')), 'Matchup');
+}
+function hBackup() {
+  return `${H.matches.length ? sampleBtns() : ''}<details class="bk"><summary>Back up or restore your history</summary><div class="d-body" style="padding:8px 0 0">
+    <p class="txt">History lives in this browser only. Copy a backup to keep it safe or to move it to another device, then paste it into Restore there.</p>
+    <textarea id="bk-text" placeholder="Backup JSON appears here. Paste a backup here to restore it." spellcheck="false"></textarea>
+    <div class="chipset"><button class="btn sm" data-act="h-copy">Copy backup</button><button class="btn sm" data-act="h-restore">Restore from pasted backup</button></div></div></details>`;
+}
+function renderHistory() {
+  const tabs = [['matches', 'Matches'], ['lists', 'Lists'], ['insights', 'Insights']];
+  const keep = $('#bk-text') ? $('#bk-text').value : '', open = document.querySelector('details.bk')?.open;
+  $('#hist-body').innerHTML = `<div class="seg" role="tablist">${tabs.map(([k, l]) => `<button role="tab" data-act="h-tab" data-d="${k}" aria-pressed="${HV.tab === k}">${l}</button>`).join('')}</div>`
+    + (HV.tab === 'matches' ? hMatches() : HV.tab === 'lists' ? hLists() : hInsights()) + hBackup();
+  if (keep) $('#bk-text').value = keep; if (open) document.querySelector('details.bk').open = true;
+}
+
+
+/* ---------- actions ---------- */
+const armed = new WeakMap();
+function confirmTap(btn, label, fn) {
+  if (armed.has(btn)) { clearTimeout(armed.get(btn).t); btn.innerHTML = armed.get(btn).h; btn.classList.remove('armed'); armed.delete(btn); fn(); return; }
+  const h = btn.innerHTML; btn.textContent = label; btn.classList.add('armed');
+  armed.set(btn, { h, t: setTimeout(() => { btn.innerHTML = h; btn.classList.remove('armed'); armed.delete(btn); }, 2800) });
+}
+const shipOf = d => S.players[+d.p].squad.ships[+d.s];
+const A = {
+  open(d) { const dl = $('#' + d.d); if (d.d === 'dlg-set') renderSettings(); if (d.d === 'dlg-end') renderEnd(); if (d.d === 'dlg-log') renderLog(); if (d.d === 'dlg-hist') renderHistory(); dl.showModal(); },
+  close(d, b) { b.closest('dialog').close(); },
+  undo() { undo(); },
+  'timer-toggle'() { S.timer.status === 'running' ? timerPause() : timerStart(); },
+  'timer-reset'(d, b) { if (S.timer.status === 'idle' && S.timer.remaining === S.timer.total) return; confirmTap(b, 'Tap again', timerReset); },
+  'timer-adj'(d) { timerAdjust(+d.d); },
+  score(d) {
+    commit(() => { const p = S.players[+d.p], n = Math.max(0, p.manual + +d.d); if (n === p.manual) return false; p.manual = n; return `${p.name} ${+d.d > 0 ? '+' : '−'}${Math.abs(d.d)} → ${total(+d.p)}`; });
+  },
+  init(d) { commit(() => { const p = S.players[+d.p]; p.init = !p.init; if (p.init) S.players[1 - +d.p].init = false; return p.init ? `${p.name} has initiative` : null; }); },
+  'round-set'(d) { commit(() => { if (S.round === +d.d) return false; S.round = +d.d; S.phase = 0; return `Round ${S.round} begins`; }); },
+  'phase-set'(d) { commit(() => { if (S.phase === +d.d) return false; S.phase = +d.d; return null; }); },
+  next() {
+    if (S.phase < PHASES.length - 1) return commit(() => { S.phase++; return null; });
+    const r = evalEnd();
+    if (r) { S.result = r; save(); renderAll(); return openEnd(); }
+    commit(() => { S.round++; S.phase = 0; const r = recoverEnd(); return `Round ${S.round} begins${r}`; });
+  },
+  back() {
+    commit(() => { if (S.phase > 0) { S.phase--; return null; } if (S.round > 1) { S.round--; S.phase = PHASES.length - 1; return `Back to round ${S.round}`; } return false; });
+  },
+  'ship-open'(d) { const s = shipOf(d); OPEN.has(s.uid) ? OPEN.delete(s.uid) : OPEN.add(s.uid); renderPlayers(); },
+  hp(d) {
+    commit(() => {
+      const s = shipOf(d), k = d.k, max = k === 'sh' ? s.shMax : s.hullMax, was = shipState(s);
+      const n = clamp(s[k] + +d.d, 0, max); if (n === s[k]) return false;
+      s[k] = n; sync(s);
+      if (s.hull <= 0) s.dead = true; else if (k === 'hull' && s.dead && +d.d > 0) s.dead = false;
+      const now = shipState(s), nm = s.n;
+      return now !== was && now !== 'ok' ? `${nm} ${now === 'dead' ? 'destroyed' : 'at half'} (+${shipWorth(s)} to ${S.players[1 - +d.p].name})` : `${nm} ${k === 'sh' ? 'shields' : 'hull'} ${n}/${max}`;
+    });
+  },
+  res(d) { commit(() => { const s = shipOf(d), k = d.k, max = k === 'ch' ? s.chMax : k === 'en' ? s.enMax : s.foMax, n = clamp(s[k] + +d.d, 0, max); if (n === s[k]) return false; s[k] = n; return `${s.n} ${k === 'ch' ? 'charges' : k === 'en' ? 'energy' : 'force'} ${n}/${max}`; }); },
+  'up-ch'(d) { commit(() => { const s = shipOf(d), u = s.ups[+d.u], n = clamp(u.c + +d.d, 0, u.cc); if (n === u.c) return false; u.c = n; return `${s.n}: ${u.n} ${n}/${u.cc}`; }); },
+  tok(d) { commit(() => { const s = shipOf(d), n = clamp(s.tok[d.k] + +d.d, 0, 9); if (n === s.tok[d.k]) return false; s.tok[d.k] = n; return null; }); },
+  dead(d) { commit(() => { const s = shipOf(d); s.dead = !s.dead; if (!s.dead && s.hull <= 0) s.hull = 1; if (s.dead) s.half = true; return s.dead ? `${s.n} destroyed (+${s.pts} to ${S.players[1 - +d.p].name})` : `${s.n} restored`; }); },
+  max(d) {
+    commit(() => {
+      const s = shipOf(d), mk = d.k === 'sh' ? 'shMax' : 'hullMax', n = Math.max(d.k === 'sh' ? 0 : 1, s[mk] + +d.d); if (n === s[mk]) return false;
+      s[mk] = n; s[d.k] = clamp(s[d.k] + (+d.d > 0 ? 1 : 0), 0, n); sync(s); return null;
+    });
+  },
+  heal(d) { commit(() => { const sq = S.players[+d.p].squad; sq.ships.forEach(s => { s.hull = s.hullMax; s.sh = s.shMax; s.dead = false; s.half = false; s.ch = s.chMax; s.fo = s.foMax; s.en = s.enMax || 0; s.ups.forEach(u => u.c = u.cc); }); return `${S.players[+d.p].name}'s squad repaired`; }); },
+  'sq-clear'(d, b) { confirmTap(b, 'Tap again', () => commit(() => { S.players[+d.p].squad = null; S.players[+d.p].faction = 'none'; return `${S.players[+d.p].name}'s squad removed`; })); },
+  'imp-open'(d) { impTarget = d.p != null ? +d.p : 0; $('#imp-text').value = ''; impSel = null; impSelId = ''; renderImport(); $('#dlg-import').showModal(); },
+  'imp-target'(d) { impTarget = +d.p; renderImport(); },
+  'imp-example'(d) { impSel = null; impSelId = ''; $('#imp-text').value = exampleLink(d.d); impTarget = d.d === 'galacticempire' ? 1 : 0; renderImport(); },
+  'imp-load'() {
+    if (!impParsed) return;
+    commit(() => { const p = S.players[impTarget]; p.squad = impParsed; if (FACTIONS[impParsed.faction] && impParsed.faction !== 'none') p.faction = impParsed.faction; return `${p.name} loaded ${impParsed.name || 'a squad'} (${squadCost(impParsed)} pts)`; });
+    $('#dlg-import').close();
+  },
+  'set-toggle'(d) { S.settings[d.d] = !S.settings[d.d]; if (d.d === 'sound' && S.settings.sound) { audio(); beep(1); } save(); wake(); renderAll(); },
+  'set-min'(d) { setMinutes(+d.d); },
+  'set-min-in'() { setMinutes(+$('#min-in').value); },
+  'set-rounds'() { const n = clamp(Math.round(+$('#rounds-in').value) || 12, 1, 30); S.settings.rounds = n; S.round = Math.min(S.round, n); save(); renderAll(); },
+  'new-game'(d) {
+    const saved = S.result && S.result.save !== false;
+    if (saved) saveMatch();
+    S.round = 1; S.phase = 0; S.log = []; undoStack = []; S.result = null; S.scenario = '';
+    S.players.forEach(p => {
+      p.manual = 0; p.init = false;
+      if (d.d === 'clear') { p.squad = null; p.faction = 'none'; }
+      else if (p.squad) p.squad.ships.forEach(s => { s.hull = s.hullMax; s.sh = s.shMax; s.dead = false; s.half = false; s.ch = s.chMax; s.fo = s.foMax; s.en = s.enMax || 0; s.ups.forEach(u => u.c = u.cc); TOKENS.forEach(([k]) => s.tok[k] = 0); });
+    });
+    lastScores[0] = lastScores[1] = null; timerReset(); $('#dlg-end').close(); save(); renderAll();
+    toast(saved ? 'Match saved to history' : 'New game started');
+  },
+  view(d) { setView(d.d === 'toggle' ? (S.ui.view === 'glance' ? 'board' : 'glance') : d.d); },
+  fs() { try { document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen(); } catch (e) {} },
+  'end-now'() { if (!S.result) S.result = { winner: leader(), reason: 'manual', round: S.round }; save(); renderRound(); openEnd(); },
+  'res-win'(d) { S.result.winner = +d.d; save(); renderEnd(); renderRound(); renderGlance(); },
+  'res-me'(d) { S.settings.me = +d.d; save(); renderEnd(); },
+  'res-save'() { S.result.save = S.result.save === false; save(); renderEnd(); },
+  'keep-playing'() { S.result = null; save(); $('#dlg-end').close(); renderAll(); },
+  'set-target'() { S.settings.target = clamp(Math.round(+$('#target-in').value) || 50, 10, 200); save(); renderAll(); },
+  'sq-fold'(d) { S.ui.collapsed[+d.p] = !S.ui.collapsed[+d.p]; save(); renderPlayers(); },
+  'list-save'(d) { const sq = snapSquad(S.players[+d.p].squad); toast(addList(sq) ? 'Saved to your lists' : 'Already in your lists'); },
+  'list-use'(d) {
+    const l = H.lists.find(x => x.id === d.d); if (!l) return;
+    const sq = rebuildList(l);
+    commit(() => { const p = S.players[+d.p]; p.squad = sq; if (FACTIONS[l.faction]) p.faction = l.faction; return `${p.name} loaded ${l.name}`; });
+    $('#dlg-hist').close(); toast('List loaded');
+  },
+  'list-del'(d, b) { confirmTap(b, 'Tap again', () => { H.lists = H.lists.filter(x => x.id !== d.d); saveH(); renderHistory(); }); },
+  'h-fold'(d) { HFOLD.has(d.d) ? HFOLD.delete(d.d) : HFOLD.add(d.d); try { localStorage.setItem('xwdash.hfold', JSON.stringify([...HFOLD])); } catch (e) {} renderHistory(); },
+  'h-slot'(d) { HV.upSlot = d.d; renderHistory(); },
+  'h-tab'(d) { HV.tab = d.d; renderHistory(); },
+  'h-fac'(d) { HV.fac = d.d; renderHistory(); },
+  'h-scope'(d) { HV.scope = d.d; renderHistory(); },
+  'h-open'(d) { HOPEN.has(d.d) ? HOPEN.delete(d.d) : HOPEN.add(d.d); renderHistory(); },
+  'h-del'(d, b) { confirmTap(b, 'Tap again to delete', () => { H.matches = H.matches.filter(m => m.id !== d.d); saveH(); renderHistory(); }); },
+  drill(d) {
+    if (d.k === 'mu') { const [f, o] = d.v.split('|'); HV.fac = f; HV.drill.opp = o; }
+    else if (d.k === 'pid') HV.drill.pid = +d.v;
+    else HV.drill[d.k] = d.v;
+    HV.tab = 'insights'; renderHistory();
+  },
+  'drill-clear'(d) { delete HV.drill[d.k]; if (d.k === 'opp') HV.fac = 'all'; renderHistory(); },
+  'h-sample'() { const r = loadSample(); if (!r) return; HV.tab = 'insights'; renderHistory(); toast(`Loaded ${r.m} sample matches and ${r.l} lists`); },
+  'h-unsample'() { H.matches = H.matches.filter(m => !m.sample); H.lists = H.lists.filter(l => !l.sample); saveH(); renderHistory(); toast('Sample data removed'); },
+  'h-copy'() {
+    const t = $('#bk-text'); t.value = JSON.stringify(H); t.select();
+    try { navigator.clipboard.writeText(t.value).then(() => toast('Backup copied'), () => toast('Select the text and copy it')); } catch (e) { toast('Select the text and copy it'); }
+  },
+  'h-restore'() {
+    try {
+      const j = JSON.parse($('#bk-text').value); let m = 0, l = 0;
+      (j.matches || []).forEach(x => { if (x && x.id && x.p && !H.matches.some(y => y.id === x.id)) { H.matches.push(x); m++; } });
+      (j.lists || []).forEach(x => { if (x && x.sig && !H.lists.some(y => y.sig === x.sig)) { H.lists.push(x); l++; } });
+      H.matches.sort((a, b) => b.t - a.t); saveH(); renderHistory(); toast(`Restored ${m} matches and ${l} lists`);
+    } catch (e) { toast('That backup could not be read'); }
+  },
+  'reset-all'(d, b) { confirmTap(b, 'Tap again to erase everything', () => { S = fresh(); undoStack = []; OPEN.clear(); lastScores[0] = lastScores[1] = null; save(); $('#dlg-set').close(); renderAll(); }); },
+};
+// Recurring values come from YASB: a positive number is how many a card recovers each End Phase, a negative number is how many it loses.
+const recAmt = r => r === true ? 1 : (+r || 0);
+const recNote = r => { r = recAmt(r); return r > 0 ? `▲${r} each round` : r < 0 ? `▼${-r} each round` : ''; };
+// Force recovers 1 per End Phase unless the card says otherwise (Keo Venzee, The Mandalorian and The Child do not recover).
+function forceRate(s) {
+  const d = D.pilots[s.pid] || {};
+  if (d.fr != null) return d.fr;
+  if (d.fo) return 1;
+  const withForce = s.ups.map(u => D.upgrades[u.id]).filter(x => x && x.fo);
+  return withForce.length && withForce.every(x => x.fr === 0) ? 0 : 1;
+}
+// End of the End Phase: Force, recurring charges, and the shields and energy of Huge ships recover (or decay) automatically.
+function recoverEnd() {
+  const n = { force: 0, charge: 0, shield: 0, energy: 0 };
+  S.players.forEach(p => p.squad && p.squad.ships.forEach(s => {
+    if (shipState(s) === 'dead') return;
+    const d = D.pilots[s.pid] || {}, sh = D.ships[s.ship] || {};
+    if (s.foMax) { const v = clamp(s.fo + forceRate(s), 0, s.foMax); if (v !== s.fo) { s.fo = v; n.force++; } }
+    if (s.chMax && recAmt(d.r)) { const v = clamp(s.ch + recAmt(d.r), 0, s.chMax); if (v !== s.ch) { s.ch = v; n.charge++; } }
+    s.ups.forEach(u => { const ud = D.upgrades[u.id] || {}; if (u.cc && recAmt(ud.r)) { const v = clamp(u.c + recAmt(ud.r), 0, u.cc); if (v !== u.c) { u.c = v; n.charge++; } } });
+    if (sh.sr && s.shMax) { const v = clamp(s.sh + sh.sr, 0, s.shMax); if (v !== s.sh) { s.sh = v; n.shield++; } }
+    if (sh.er && s.enMax) { const v = clamp(s.en + sh.er, 0, s.enMax); if (v !== s.en) { s.en = v; n.energy++; } }
+  }));
+  const parts = [];
+  if (n.force) parts.push(`Force on ${n.force} ship${n.force > 1 ? 's' : ''}`);
+  if (n.charge) parts.push(`${n.charge} recurring charge${n.charge > 1 ? 's' : ''}`);
+  if (n.shield) parts.push(`shields on ${n.shield} large ship${n.shield > 1 ? 's' : ''}`);
+  if (n.energy) parts.push(`energy on ${n.energy} large ship${n.energy > 1 ? 's' : ''}`);
+  return parts.length ? ' · recovered ' + parts.join(', ') : '';
+}
+function setMinutes(m) {
+  m = clamp(Math.round(m) || 75, 5, 240); const t = S.timer, old = t.total;
+  S.settings.minutes = m; t.total = m * 60000;
+  if (t.status === 'idle' || t.status === 'done') { t.status = 'idle'; t.remaining = t.total; }
+  else { const diff = t.total - old, r = Math.max(0, remaining() + diff); if (t.status === 'running') t.endAt = Date.now() + r; else t.remaining = r; }
+  syncWarned(); save(); renderAll();
+}
+
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b || b.disabled) return;
+  const f = A[b.dataset.act]; if (f) f(b.dataset, b, e);
+});
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t.dataset.name != null) { const p = S.players[+t.dataset.name]; p.name = t.value.trim().slice(0, 24) || 'Player ' + (+t.dataset.name + 1); save(); renderAll(); }
+  if (t.dataset.scn != null) { S.scenario = t.value; if (t.value) addLog('Scenario: ' + SCENARIOS[t.value].n); save(); renderAll(); }
+  if (t.dataset.lname != null) { const l = H.lists.find(x => x.id === t.dataset.lname); if (l) { l.name = t.value.trim().slice(0, 40) || l.name; saveH(); renderHistory(); } }
+});
+document.addEventListener('animationend', e => e.target.classList.remove('bump'));
+$('#imp-text').addEventListener('input', () => { impSel = null; impSelId = ''; renderImport(); });
+$('#imp-saved').addEventListener('change', e => { impSelId = e.target.value; const l = H.lists.find(x => x.id === impSelId); impSel = l ? rebuildList(l) : null; if (l) $('#imp-text').value = ''; renderImport(); });
+document.addEventListener('input', e => { if (e.target.id === 'end-notes' && S.result) { S.result.notes = e.target.value; save(); } });
+document.addEventListener('toggle', e => { if (e.target.matches && e.target.matches('details.scen-d')) scnOpen = e.target.open; }, true);
+let tx = 0, ty = 0, tt = 0, tracking = false;
+document.addEventListener('touchstart', e => {
+  if (e.touches.length !== 1 || document.querySelector('dialog[open]')) { tracking = false; return; }
+  const t = e.touches[0]; tx = t.clientX; ty = t.clientY; tt = Date.now(); tracking = !e.target.closest('input, textarea, select');
+}, { passive: true });
+document.addEventListener('touchend', e => {
+  if (!tracking) return; tracking = false;
+  const t = e.changedTouches[0], dx = t.clientX - tx, dy = t.clientY - ty;
+  if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.6 && Date.now() - tt < 800) setView(dx < 0 ? 'glance' : 'board');
+}, { passive: true });
+document.addEventListener('keydown', e => {
+  if (document.querySelector('dialog[open]') || /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(e.target.tagName) || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.code === 'Space') { e.preventDefault(); A['timer-toggle'](); }
+  else if (e.key === 'ArrowRight') A.next();
+  else if (e.key === 'ArrowLeft') A.back();
+  else if (e.key.toLowerCase() === 'z') undo();
+  else if (e.key.toLowerCase() === 'g') A.view({ d: 'toggle' });
+  else if (e.key === 'Escape' && S.ui.view === 'glance') setView('board');
+});
+document.addEventListener('visibilitychange', () => { tick(); wake(); });
+document.querySelectorAll('dialog').forEach(d => d.addEventListener('click', e => { if (e.target === d) d.close(); }));
+
+/* ---------- boot ---------- */
+// Early versions counted upgrade costs in a ship's points. Squad points are the pilot cost only.
+function migrate() {
+  S.players.forEach(p => { p.faction = p.squad && FACTIONS[p.squad.faction] && p.squad.faction !== 'none' ? p.squad.faction : (p.squad ? p.faction : 'none'); });
+  const cost = id => { const p = D.pilots[id]; return p ? (Array.isArray(p.p) ? p.p[0] : p.p || 0) : null; };
+  if (!S.mig2) {
+    S.players.forEach(p => p.squad && p.squad.ships.forEach(s => { const c = cost(s.pid); if (c != null) { s.pts = c; s.load = s.ups.reduce((a, u) => a + (u.p || 0), 0); s.lo = (D.pilots[s.pid] || {}).lo ?? null; } }));
+    S.mig2 = 1; save();
+  }
+  if (!S.mig3) {
+    S.players.forEach(p => p.squad && p.squad.ships.forEach(s => { if (s.enMax == null) { const e = (D.ships[s.ship] || {}).en || 0; s.en = e; s.enMax = e; } }));
+    S.mig3 = 1; save();
+  }
+  if (!H.mig2) {
+    H.matches.forEach(m => m.p.forEach(p => { if (p.squad) { p.squad.ships.forEach(s => { const c = cost(s.pid); if (c != null) s.pts = c; }); p.squad.cost = p.squad.ships.reduce((a, s) => a + s.pts, 0); } }));
+    H.lists.forEach(l => { l.points = l.ships.reduce((a, x) => a + (cost(x.pid) || 0), 0); });
+    H.mig2 = 1; saveH();
+  }
+}
+(function boot() {
+  const t = S.timer;
+  if (t.status === 'running' && t.endAt <= Date.now()) { t.status = 'done'; t.remaining = 0; }
+  if (t.total !== S.settings.minutes * 60000 && t.status === 'idle') { t.total = t.remaining = S.settings.minutes * 60000; }
+  migrate();
+  // First run: show five sample games so the History screens have something to display. They are marked as samples and can be removed there.
+  try { if (!localStorage.getItem('xwdash.sample1') && !H.matches.length && !H.lists.length && window.XW_SAMPLE) { loadSample(); localStorage.setItem('xwdash.sample1', '1'); } } catch (e) {}
+  syncWarned(); buildTicks(); renderAll(); wake();
+  if (!document.fullscreenEnabled) $('#g-fs').hidden = true;
+  setView(S.ui.view === 'glance' ? 'glance' : 'board');
+  setInterval(tick, 250);
+})();
+})();
+</script>
+
+<script>if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(function () {});</script>
+</body>
+</html>
