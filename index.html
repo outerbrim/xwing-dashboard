@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-title" content="X-Wing">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icons/icon-192.png">
+<link rel="icon" href="icons/icon-192.png?v=2">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html,body{margin:0}[hidden]{display:none!important}</style>
 <title>X-Wing Game Dashboard</title>
@@ -502,10 +502,14 @@ details.bk summary { cursor: pointer; color: var(--fg-dim); font-size: 13px; min
 .g-state { grid-area: state; font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--fg-dim); font-weight: 600; }
 .g-play { grid-area: play; width: clamp(48px, 8vh, 68px); height: clamp(48px, 8vh, 68px); border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--on-accent); }
 .g-play:active { transform: scale(.94); } .g-play .ic { width: 45%; height: 45%; }
-.pi { display: inline-block; width: 9px; height: 9px; margin: 0 12px 0 6px; vertical-align: -1px; background: var(--hull); }
+.pi { display: block; width: 9px; height: 9px; flex: none; background: var(--hull); }
 .pi.sh { background: var(--shield); border-radius: 50%; }
-.pi.hu { margin-right: 2px; }
-.mini b { display: inline-flex; align-items: center; }
+.hs { display: inline-flex; align-items: center; gap: 3px; line-height: 1; }
+.chip:has(.hs), .mini b { display: inline-flex; align-items: center; gap: 9px; }
+.atk { color: #e5484d; } .agi { color: #30a46c; } .a-r { color: #e5484d; } .a-p { color: #9d5cff; }
+.tok-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; } .toks[hidden] { display: none; }
+.swap #players > :first-child { order: 2; } .swap .g-scores { flex-direction: row-reverse; }
+html.lock, html.lock body { overflow: hidden; } html.lock body { position: fixed; left: 0; right: 0; width: 100%; }
 .g-rbar { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; }
 .g-rbar i { height: 8px; border-radius: 4px; background: var(--surface-3); overflow: hidden; display: block; }
 .g-rbar i.done { background: var(--yellow); }
@@ -668,7 +672,7 @@ const rulesUrl = k => RULES + '#page=' + (SCENARIOS[k] ? SCENARIOS[k].page : 2);
 const newPlayer = (i) => ({ name: 'Player ' + (i + 1), faction: 'none', manual: 0, init: false, squad: null });
 const fresh = () => ({
   v: 1,
-  settings: { minutes: 75, rounds: 12, sound: true, wake: false, auto: true, target: 50, me: -1 },
+  settings: { minutes: 75, rounds: 12, sound: true, wake: false, auto: true, target: 50, me: -1, swap: false, hideTok: false },
   timer: { status: 'idle', total: 75 * 60000, remaining: 75 * 60000, endAt: 0, warned: {} },
   round: 1, phase: 0, scenario: '', result: null,
   ui: { collapsed: [false, false], view: 'board' },
@@ -686,8 +690,8 @@ let saveT = 0;
 const save = () => { clearTimeout(saveT); saveT = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }, 200); };
 
 /* ---------- history store ---------- */
-let H = { matches: [], lists: [] };
-try { const h = JSON.parse(localStorage.getItem(HKEY) || 'null'); if (h) H = { matches: h.matches || [], lists: h.lists || [], mig2: h.mig2 }; } catch (e) {}
+let H = { matches: [], lists: [], del: [] };
+try { const h = JSON.parse(localStorage.getItem(HKEY) || 'null'); if (h) H = { matches: h.matches || [], lists: h.lists || [], del: h.del || [], mig2: h.mig2 }; } catch (e) {}
 const saveH = () => { try { localStorage.setItem(HKEY, JSON.stringify(H)); } catch (e) {} };
 let toastT = 0;
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 2400); }
@@ -1042,7 +1046,7 @@ function shipHTML(pi, si, s) {
       <span class="initb">${s.init}</span>
       <span style="min-width:0"><div class="s-name">${s.u ? '<i>●</i>' : ''}${esc(s.n)}</div>
         <div class="s-sub">${esc(s.ship)}${s.ups.length ? ' · ' + esc(s.ups.map(u => u.n).join(', ')) : ''}${s.lo != null ? ' · loadout ' + s.load + '/' + s.lo : ''}</div>
-        <div class="chips"><span class="chip">${s.sh}<i class="pi sh"></i>${s.hull}<i class="pi hu"></i></span>${st === 'half' ? `<span class="chip half">Half health · +${worth}</span>` : ''}${st === 'dead' ? `<span class="chip dead">Destroyed · +${worth}</span>` : ''}${tokChips}</div></span>
+        <div class="chips"><span class="chip"><span class="hs">${s.hull}<i class="pi hu"></i></span><span class="hs">${s.sh}<i class="pi sh"></i></span></span>${st === 'half' ? `<span class="chip half">Half health · +${worth}</span>` : ''}${st === 'dead' ? `<span class="chip dead">Destroyed · +${worth}</span>` : ''}${tokChips}</div></span>
       <span class="cost">${s.pts}</span>
     </button>`;
   if (!open) return `<article class="ship" data-state="${st}">${head}</article>`;
@@ -1050,20 +1054,20 @@ function shipHTML(pi, si, s) {
   const body = `
     <div class="s-body">
       <div class="stat-grid">
-        ${s.shMax > 0 || s.sh > 0 ? stepper('Shields', s.sh, s.shMax, 'shield', A('hp', 'sh'), recNote((D.ships[s.ship] || {}).sr)) : ''}
         ${stepper('Hull', s.hull, s.hullMax, 'hull', A('hp', 'hull'))}
+        ${s.shMax > 0 || s.sh > 0 ? stepper('Shields', s.sh, s.shMax, 'shield', A('hp', 'sh'), recNote((D.ships[s.ship] || {}).sr)) : ''}
         ${s.chMax ? stepper('Charges', s.ch, s.chMax, 'charge', A('res', 'ch'), recNote((D.pilots[s.pid] || {}).r)) : ''}
         ${s.foMax ? stepper('Force', s.fo, s.foMax, 'force', A('res', 'fo'), forceRate(s) ? recNote(forceRate(s)) : 'no recovery') : ''}
         ${s.enMax ? stepper('Energy', s.en, s.enMax, 'charge', A('res', 'en'), recNote((D.ships[s.ship] || {}).er)) : ''}
       </div>
-      <p class="txt"><span class="label">ATK ${s.atk} · AGI ${s.agi}</span>${s.actions.length ? ' · ' + esc(s.actions.map(a => a.replace(/^R-/, '')).join(', ')) : ''}</p>
+      <p class="txt"><span class="label"><span class="atk">ATK ${s.atk}</span> · <span class="agi">AGI ${s.agi}</span></span>${s.actions.length ? ' · ' + s.actions.map(a => `<span class="${a.startsWith('R-') ? 'a-r' : a.startsWith('F-') ? 'a-p' : ''}">${esc(a.replace(/^[RF]-/, ''))}</span>`).join(', ') : ''}</p>
       ${s.text ? `<p class="txt">${richText(s.text)}</p>` : ''}
       ${s.ups.map((u, ui) => `<div class="up"><div class="u-top"><span class="u-n">${esc(u.n)}<small>${esc(u.s)}${u.cc && recNote((D.upgrades[u.id] || {}).r) ? ' · charges ' + recNote((D.upgrades[u.id] || {}).r) : ''}</small></span><span class="u-c">${u.p}</span></div>
           ${u.t ? `<p class="txt">${richText(u.t)}</p>` : ''}
           ${u.cc ? `<div class="step"><button data-act="up-ch" data-p="${pi}" data-s="${si}" data-u="${ui}" data-d="-1" aria-label="Spend charge" ${u.c <= 0 ? 'disabled' : ''}>−</button>${dots(u.c, u.cc, 'charge')}<button data-act="up-ch" data-p="${pi}" data-s="${si}" data-u="${ui}" data-d="1" aria-label="Recover charge" ${u.c >= u.cc ? 'disabled' : ''}>+</button></div>` : ''}</div>`).join('')}
       ${s.unknown.length ? `<p class="txt">Not found in the card data: ${esc(s.unknown.join(', '))}</p>` : ''}
-      <span class="label sub-h">Tokens</span>
-      <div class="toks">${TOKENS.map(([k, l]) => `<div class="tok ${s.tok[k] ? 'has' : ''}"><button data-act="tok" data-p="${pi}" data-s="${si}" data-k="${k}" data-d="-1" aria-label="Remove ${l}">−</button><span>${l}<b>${s.tok[k]}</b></span><button data-act="tok" data-p="${pi}" data-s="${si}" data-k="${k}" data-d="1" aria-label="Add ${l}">+</button></div>`).join('')}</div>
+      <div class="tok-h"><span class="label sub-h">Tokens</span><button class="btn sm ghost" data-act="tok-hide">${S.settings.hideTok ? 'Show tokens' : 'Hide tokens'}</button></div>
+      <div class="toks" ${S.settings.hideTok ? 'hidden' : ''}>${TOKENS.map(([k, l]) => `<div class="tok ${s.tok[k] ? 'has' : ''}"><button data-act="tok" data-p="${pi}" data-s="${si}" data-k="${k}" data-d="-1" aria-label="Remove ${l}">−</button><span>${l}<b>${s.tok[k]}</b></span><button data-act="tok" data-p="${pi}" data-s="${si}" data-k="${k}" data-d="1" aria-label="Add ${l}">+</button></div>`).join('')}</div>
       <div class="s-actions">
         <button class="btn sm ${s.dead ? '' : 'danger'}" data-act="dead" data-p="${pi}" data-s="${si}">${s.dead ? 'Restore ship' : 'Mark destroyed'}</button>
         <button class="btn sm ghost" data-act="max" data-p="${pi}" data-s="${si}" data-k="hull" data-d="1">Hull max +</button>
@@ -1084,7 +1088,7 @@ function renderPlayer(pi) {
     <div class="squad">
       <div class="sq-head"><button class="sq-toggle" data-act="sq-fold" data-p="${pi}" aria-expanded="${!col}" aria-label="${col ? 'Expand' : 'Collapse'} squad"><svg class="ic" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg><span class="t"><b>${esc(sq.name || 'Squad')}</b><span><span class="fdot" style="background:${f.c}"></span> ${esc(f.n)} · ${squadCost(sq)}${sq.points ? ' / ' + sq.points : ''} pts · ${alive} of ${sq.ships.length} ships flying</span></span></button>
         ${col ? '' : `<div class="sq-actions"><button class="btn sm" data-act="imp-open" data-p="${pi}">Replace</button><button class="btn sm ghost" data-act="list-save" data-p="${pi}">Save list</button><button class="btn sm ghost" data-act="heal" data-p="${pi}">Repair all</button><button class="btn sm ghost" data-act="sq-clear" data-p="${pi}">Remove</button></div>`}</div>
-      ${col ? `<div class="sq-mini">${sq.ships.map(s => `<span class="mini ${shipState(s)}">${esc(s.n.replace(/^["“”]|["“”]$/g, ''))} <b>${s.sh}<i class="pi sh"></i>${s.hull}<i class="pi hu"></i></b></span>`).join('')}</div>` : sq.ships.map((s, si) => shipHTML(pi, si, s)).join('')}
+      ${col ? `<div class="sq-mini">${sq.ships.map(s => `<span class="mini ${shipState(s)}">${esc(s.n.replace(/^["“”]|["“”]$/g, ''))} <b><span class="hs">${s.hull}<i class="pi hu"></i></span><span class="hs">${s.sh}<i class="pi sh"></i></span></b></span>`).join('')}</div>` : sq.ships.map((s, si) => shipHTML(pi, si, s)).join('')}
     </div>` : `
     <div class="squad"><div class="empty"><p>Import a list from Yet Another Squad Builder to track hull, shields, charges and points per ship.</p>
       <button class="btn primary" data-act="imp-open" data-p="${pi}"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v3h16v-3"/></svg>Import squad</button></div></div>`;
@@ -1115,6 +1119,7 @@ function renderPlayers() {
   });
 }
 function renderAll() {
+  document.documentElement.classList.toggle('swap', !!S.settings.swap);
   renderRound(); renderPlayers(); renderGlance(); renderTimerStatic(); tickUI();
   $('#undo').disabled = !undoStack.length;
   $('#foot').textContent = `Card data from YASB ${D.v}, built ${D.built || ''}. Pilot and upgrade stats come from there.`;
@@ -1151,6 +1156,7 @@ function renderSettings() {
       <div class="chipset"><input type="number" id="rounds-in" min="1" max="30" value="${s.rounds}" aria-label="Number of rounds"><button class="btn sm" data-act="set-rounds">Set</button></div></div>
     <div class="field"><span class="label">Game ends at</span>
       <div class="chipset"><input type="number" id="target-in" min="10" max="200" value="${s.target}" aria-label="Winning score"><span class="txt">points, checked at the end of the End Phase</span><button class="btn sm" data-act="set-target">Set</button></div></div>
+    ${sw('swap', s.swap, 'Swap player positions', 'Puts Player 1 on the right and Player 2 on the left, on the board and the at a glance screen.')}
     ${sw('sound', s.sound, 'Sound alerts', 'Beeps at 10, 5 and 1 minute and when time is called.')}
     ${sw('wake', s.wake, 'Keep screen awake', 'While the timer runs, where the device allows it.')}
     ${sw('auto', s.auto, 'Score from ship damage', 'Opponent scores half the cost (rounded down) when a ship first drops to half hull and shields, and the rest when it is destroyed.')}
@@ -1179,7 +1185,7 @@ function renderImport() {
 let impTarget = 0, impParsed = null, impSel = null, impSelId = '';
 
 /* ---------- history screens ---------- */
-const HV = { tab: 'matches', fac: 'all', scope: 'all', drill: {}, upSlot: '' };
+const HV = { pl: [true, true], tab: 'matches', fac: 'all', scope: 'all', drill: {}, upSlot: '' };
 function loadSample() {
   const smp = window.XW_SAMPLE; if (!smp) return null; let m = 0, l = 0;
   smp.matches.forEach(x => { if (!H.matches.some(y => y.id === x.id)) { H.matches.push(JSON.parse(JSON.stringify(x))); m++; } });
@@ -1238,7 +1244,7 @@ function hLists() {
 function entries() {
   const out = [], d = HV.drill;
   H.matches.forEach(m => m.p.forEach((p, i) => {
-    if (!p.squad) return;
+    if (!p.squad || !HV.pl[i]) return;
     const e = { m, i, f: p.faction, opp: m.p[1 - i].faction, res: m.winner === i ? 'w' : m.winner === -1 ? 'd' : 'l', score: p.score, squad: p.squad };
     if (HV.fac !== 'all' && e.f !== HV.fac) return;
     if (HV.scope === 'mine' && m.me !== i) return;
@@ -1298,7 +1304,7 @@ function hInsights() {
     const lab = k === 'pid' ? (D.pilots[v] || {}).n : k === 'scn' ? (SCENARIOS[v] || {}).n : k === 'opp' ? 'vs ' + fName(v) : k === 'slot' ? v + ' slot' : k === 'sig' ? ((H.lists.find(l => l.sig === v) || {}).name || 'List') : v;
     return `<button class="btn sm" data-act="drill-clear" data-k="${k}" aria-label="Remove filter">${esc(lab || v)} ✕</button>`;
   }).join('');
-  const controls = `${facChips()}${hasMine ? `<div class="seg" role="group"><button data-act="h-scope" data-d="all" aria-pressed="${HV.scope === 'all'}">Both sides</button><button data-act="h-scope" data-d="mine" aria-pressed="${HV.scope === 'mine'}">Only my lists</button></div>` : ''}${chips ? `<div class="chipset"><span class="label">Filtered by</span>${chips}</div>` : ''}`;
+  const controls = `${facChips()}${hasMine ? `<div class="seg" role="group"><button data-act="h-scope" data-d="all" aria-pressed="${HV.scope === 'all'}">Both sides</button><button data-act="h-scope" data-d="mine" aria-pressed="${HV.scope === 'mine'}">Only my lists</button></div>` : ''}${chips ? `<div class="chipset"><span class="label">Filtered by</span>${chips}</div>` : ''}<div class="chipset"><span class="label">Players</span><button class="btn sm" data-act="h-pl" data-d="0" aria-pressed="${HV.pl[0]}">Player 1</button><button class="btn sm" data-act="h-pl" data-d="1" aria-pressed="${HV.pl[1]}">Player 2</button></div>`;
   if (!es.length) return controls + emptyHist('No lists match these filters.');
   const w = es.filter(e => e.res === 'w').length, ships = es.flatMap(e => shipsOfE(e)), lost = ships.filter(s => s.end === 'dead').length;
   const nUp = ships.reduce((a, s) => a + s.ups.length, 0);
@@ -1346,7 +1352,8 @@ function takeAuth() {
 function logout() { AUTH = null; try { localStorage.removeItem(AKEY); } catch (e) {} }
 function mergeH(j) {
   let m = 0, l = 0;
-  (j.matches || []).forEach(x => { if (x && x.id && x.p && !H.matches.some(y => y.id === x.id)) { H.matches.push(x); m++; } });
+  const gone = new Set([...(H.del || []), ...(j.del || [])]); H.del = [...gone].slice(-1000); H.matches = H.matches.filter(x => !gone.has(x.id));
+  (j.matches || []).forEach(x => { if (x && x.id && x.p && !gone.has(x.id) && !H.matches.some(y => y.id === x.id)) { H.matches.push(x); m++; } });
   (j.lists || []).forEach(x => { if (x && x.sig && !H.lists.some(y => y.sig === x.sig)) { H.lists.push(x); l++; } });
   H.matches.sort((a, b) => b.t - a.t); return [m, l];
 }
@@ -1358,7 +1365,7 @@ async function syncNow() {
     if (r.status === 401) { logout(); toast('Session expired. Log in again'); return; }
     if (!r.ok) throw 0;
     const [m, l] = mergeH(await r.json()); saveH();
-    const body = JSON.stringify({ matches: H.matches.filter(x => !x.sample), lists: H.lists.filter(x => !x.sample) });
+    const body = JSON.stringify({ matches: H.matches.filter(x => !x.sample), lists: H.lists.filter(x => !x.sample), del: H.del || [] });
     const w = await fetch('/api/sync', { method: 'PUT', headers: hd, body });
     if (!w.ok) throw 0;
     toast(`Synced. Added ${m} matches and ${l} lists from your account`);
@@ -1385,6 +1392,14 @@ function renderHistory() {
 }
 
 
+let LY = 0;
+function syncLock() {
+  const on = !!document.querySelector('dialog[open]'), de = document.documentElement;
+  if (on === de.classList.contains('lock')) return;
+  if (on) { LY = window.scrollY; document.body.style.top = -LY + 'px'; de.classList.add('lock'); }
+  else { de.classList.remove('lock'); document.body.style.top = ''; window.scrollTo(0, LY); }
+}
+new MutationObserver(syncLock).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['open'] });
 /* ---------- actions ---------- */
 const armed = new WeakMap();
 function confirmTap(btn, label, fn) {
@@ -1446,6 +1461,8 @@ const A = {
     commit(() => { const p = S.players[impTarget]; p.squad = impParsed; if (FACTIONS[impParsed.faction] && impParsed.faction !== 'none') p.faction = impParsed.faction; return `${p.name} loaded ${impParsed.name || 'a squad'} (${squadCost(impParsed)} pts)`; });
     $('#dlg-import').close();
   },
+  'tok-hide'() { S.settings.hideTok = !S.settings.hideTok; save(); renderAll(); },
+  'h-pl'(d) { const i = +d.d; if (HV.pl[i] && !HV.pl[1 - i]) return toast('Keep at least one player on'); HV.pl[i] = !HV.pl[i]; renderHistory(); },
   'set-toggle'(d) { S.settings[d.d] = !S.settings[d.d]; if (d.d === 'sound' && S.settings.sound) { audio(); beep(1); } save(); wake(); renderAll(); },
   'set-min'(d) { setMinutes(+d.d); },
   'set-min-in'() { setMinutes(+$('#min-in').value); },
@@ -1485,7 +1502,7 @@ const A = {
   'h-fac'(d) { HV.fac = d.d; renderHistory(); },
   'h-scope'(d) { HV.scope = d.d; renderHistory(); },
   'h-open'(d) { HOPEN.has(d.d) ? HOPEN.delete(d.d) : HOPEN.add(d.d); renderHistory(); },
-  'h-del'(d, b) { confirmTap(b, 'Tap again to delete', () => { H.matches = H.matches.filter(m => m.id !== d.d); saveH(); renderHistory(); }); },
+  'h-del'(d, b) { confirmTap(b, 'Tap again to delete', () => { H.matches = H.matches.filter(m => m.id !== d.d); H.del = [...(H.del || []), d.d].slice(-1000); saveH(); renderHistory(); }); },
   drill(d) {
     if (d.k === 'mu') { const [f, o] = d.v.split('|'); HV.fac = f; HV.drill.opp = o; }
     else if (d.k === 'pid') HV.drill.pid = +d.v;
