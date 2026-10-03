@@ -100,7 +100,7 @@ svg { display: block; }
   border-bottom: 1px solid var(--line);
 }
 .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.brand img { width: 30px; height: 30px; object-fit: contain; }
+.brand img { width: 30px; height: 30px; object-fit: contain; transform: translateY(2px); }
 .brand b { font-family: var(--font-display); font-size: 19px; letter-spacing: .06em; text-transform: uppercase; font-weight: 700; white-space: nowrap; }
 .hud { flex: 1; display: flex; justify-content: center; align-items: center; gap: 16px; min-width: 0; }
 .hud .cell { display: flex; flex-direction: column; align-items: center; line-height: 1; gap: 3px; white-space: nowrap; flex: none; }
@@ -483,9 +483,9 @@ details.bk summary { cursor: pointer; color: var(--fg-dim); font-size: 13px; min
 .g-rl b { font-family: var(--font-display); font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .g-rl b small { color: var(--fg-dim); font-weight: 500; font-size: 14px; }
 .g-scn { flex: 1; min-width: 0; text-align: center; font-size: 13px; color: var(--fg-dim); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pie { display: flex; justify-content: center; gap: 20px; align-items: center; flex-wrap: wrap; padding: 8px 0 4px; }
+.pie { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; padding: 8px 0 4px; }
 .pie svg { width: 170px; height: 170px; flex: none; }
-.pie-k { flex: 0 1 240px; min-width: 180px; }
+.pie-k { flex: 1; min-width: 180px; }
 .pie-l { display: flex; gap: 8px; align-items: center; font-size: 14px; margin: 5px 0; }
 .pie-l i { width: 12px; height: 12px; border-radius: 3px; flex: none; }
 .pie-l b { font-family: var(--font-display); margin-left: auto; padding-left: 12px; }
@@ -502,9 +502,10 @@ details.bk summary { cursor: pointer; color: var(--fg-dim); font-size: 13px; min
 .g-state { grid-area: state; font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--fg-dim); font-weight: 600; }
 .g-play { grid-area: play; width: clamp(48px, 8vh, 68px); height: clamp(48px, 8vh, 68px); border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--on-accent); }
 .g-play:active { transform: scale(.94); } .g-play .ic { width: 45%; height: 45%; }
-.pi { display: inline-block; width: 9px; height: 9px; margin: 0 8px 0 4px; vertical-align: -1px; background: var(--hull); }
+.pi { display: inline-block; width: 9px; height: 9px; margin: 0 12px 0 6px; vertical-align: -1px; background: var(--hull); }
 .pi.sh { background: var(--shield); border-radius: 50%; }
 .pi.hu { margin-right: 2px; }
+.mini b { display: inline-flex; align-items: center; }
 .g-rbar { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; }
 .g-rbar i { height: 8px; border-radius: 4px; background: var(--surface-3); overflow: hidden; display: block; }
 .g-rbar i.done { background: var(--yellow); }
@@ -531,7 +532,7 @@ details.bk summary { cursor: pointer; color: var(--fg-dim); font-size: 13px; min
   <div class="tools">
     <button class="icon-btn" id="undo" data-act="undo" aria-label="Undo last change" title="Undo (Z)"><svg class="ic" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button>
     <button class="icon-btn" data-act="view" data-d="toggle" aria-label="At a glance screen" title="At a glance (G)"><svg class="ic" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
-    <button class="icon-btn" data-act="open" data-d="dlg-hist" aria-label="History and stats" title="History and stats"><svg class="ic" viewBox="0 0 24 24"><path d="M4 20V11M10 20V4M16 20v-7M22 20H2"/></svg></button>
+    <button class="icon-btn" data-act="open" data-d="dlg-hist" aria-label="History and Stats" title="History and Stats"><svg class="ic" viewBox="0 0 24 24"><path d="M4 20V11M10 20V4M16 20v-7M22 20H2"/></svg></button>
     <button class="icon-btn" data-act="open" data-d="dlg-set" aria-label="Settings" title="Settings"><svg class="ic" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg></button>
   </div>
 </header>
@@ -583,7 +584,7 @@ details.bk summary { cursor: pointer; color: var(--fg-dim); font-size: 13px; min
 <div class="toast" id="toast" role="status"></div>
 
 <dialog id="dlg-hist" class="wide" aria-labelledby="hist-h">
-  <div class="d-head"><h3 id="hist-h">History and stats</h3><button class="icon-btn" data-act="close" aria-label="Close"><svg class="ic" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+  <div class="d-head"><h3 id="hist-h">History and Stats</h3><button class="icon-btn" data-act="close" aria-label="Close"><svg class="ic" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
   <div class="d-body" id="hist-body"></div>
 </dialog>
 
@@ -1022,10 +1023,10 @@ function renderGlance() {
   $('#glance-body').innerHTML = `
     <div class="g-round"><div class="g-rl"><span class="label">Round</span><span class="g-scn">${sc ? esc(sc.n) : ''}</span><b>${S.round}<small> of ${n}</small></b></div>
       <div class="g-rbar" role="progressbar" aria-label="Round progress" aria-valuemin="1" aria-valuemax="${n}" aria-valuenow="${S.round}">${segs}</div></div>
-    <div class="g-info">${esc(PHASES[S.phase][0])} phase${res}</div>
-    <div class="g-scores">${scores}</div>
     <div class="g-clock"><div class="g-fill" id="g-fill"></div>
-      <div class="g-face"><span class="num g-time" id="g-time">${fmt(remaining())}</span><span class="g-state" id="g-state"></span><button class="g-play" id="g-toggle" data-act="timer-toggle" aria-label="Start or pause timer"></button></div></div>`;
+      <div class="g-face"><span class="num g-time" id="g-time">${fmt(remaining())}</span><span class="g-state" id="g-state"></span><button class="g-play" id="g-toggle" data-act="timer-toggle" aria-label="Start or pause timer"></button></div></div>
+    <div class="g-info">${esc(PHASES[S.phase][0])} phase${res}</div>
+    <div class="g-scores">${scores}</div>`;
   renderTimerStatic(); tickUI();
 }
 function setView(v) {
@@ -1083,7 +1084,7 @@ function renderPlayer(pi) {
     <div class="squad">
       <div class="sq-head"><button class="sq-toggle" data-act="sq-fold" data-p="${pi}" aria-expanded="${!col}" aria-label="${col ? 'Expand' : 'Collapse'} squad"><svg class="ic" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg><span class="t"><b>${esc(sq.name || 'Squad')}</b><span><span class="fdot" style="background:${f.c}"></span> ${esc(f.n)} · ${squadCost(sq)}${sq.points ? ' / ' + sq.points : ''} pts · ${alive} of ${sq.ships.length} ships flying</span></span></button>
         ${col ? '' : `<div class="sq-actions"><button class="btn sm" data-act="imp-open" data-p="${pi}">Replace</button><button class="btn sm ghost" data-act="list-save" data-p="${pi}">Save list</button><button class="btn sm ghost" data-act="heal" data-p="${pi}">Repair all</button><button class="btn sm ghost" data-act="sq-clear" data-p="${pi}">Remove</button></div>`}</div>
-      ${col ? `<div class="sq-mini">${sq.ships.map(s => `<span class="mini ${shipState(s)}">${esc(s.n.replace(/^["“”]|["“”]$/g, ''))} <b>${s.sh}<i style="color:var(--shield);font-style:normal">●</i> ${s.hull}<i style="color:var(--hull);font-style:normal">■</i></b></span>`).join('')}</div>` : sq.ships.map((s, si) => shipHTML(pi, si, s)).join('')}
+      ${col ? `<div class="sq-mini">${sq.ships.map(s => `<span class="mini ${shipState(s)}">${esc(s.n.replace(/^["“”]|["“”]$/g, ''))} <b>${s.sh}<i class="pi sh"></i>${s.hull}<i class="pi hu"></i></b></span>`).join('')}</div>` : sq.ships.map((s, si) => shipHTML(pi, si, s)).join('')}
     </div>` : `
     <div class="squad"><div class="empty"><p>Import a list from Yet Another Squad Builder to track hull, shields, charges and points per ship.</p>
       <button class="btn primary" data-act="imp-open" data-p="${pi}"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v3h16v-3"/></svg>Import squad</button></div></div>`;
@@ -1321,7 +1322,7 @@ function hInsights() {
     + section('pilots', 'Pilots', 'Tap a row to see what that pilot carries.' + scope, top(pilots).map(r => irow(r, 'pid', r.id, 'destroyed')), 'Pilot')
     + section('ships', 'Ships', 'Chassis flown across the lists.' + scope, top(shipsA).map(r => irow(r, 'ship', r.id, 'destroyed')), 'Ship')
     + section('upgrades', 'Upgrades', `${upsShown.length} different upgrades${HV.upSlot ? ' in ' + esc(HV.upSlot) : ''}. Tap one to see which pilots carry it.`, top(upsShown, 25).map(r => irow(r, 'up', r.id, 'carrier lost')), 'Upgrade', slotChips)
-    + section('pairs', 'Pilot and upgrade pairs', 'Combinations used more than once.', top(combos, 12).map(r => irow(r, 'pid', r.id.split('|')[0], 'carrier lost')), 'Combination')
+    + section('pairs', 'Pilot and Upgrade Pairs', 'Combinations used more than once.', top(combos, 12).map(r => irow(r, 'pid', r.id.split('|')[0], 'carrier lost')), 'Combination')
     + section('scenarios', 'Scenarios', 'How these lists did in each scenario.', top(scn).map(r => irow(r, 'scn', r.id, '')), 'Scenario')
     + section('matchups', 'Faction Matchups', 'Tap to see those games only.', top(mu).map(r => irow(r, 'mu', r.id, '')), 'Matchup');
 }
