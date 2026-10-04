@@ -700,8 +700,11 @@ let saveT = 0;
 const save = () => { clearTimeout(saveT); saveT = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }, 200); };
 
 /* ---------- history store ---------- */
+const cleanName = n => { let t = String(n ?? ''); for (let i = 0; i < 2 && /%[0-9A-Fa-f]{2}/.test(t); i++) { try { t = decodeURIComponent(t); } catch (e) { break; } } return t.trim(); };
 let H = { matches: [], lists: [], del: [] };
 try { const h = JSON.parse(localStorage.getItem(HKEY) || 'null'); if (h) H = { matches: h.matches || [], lists: h.lists || [], del: h.del || [], mig2: h.mig2 }; } catch (e) {}
+H.lists.forEach(l => { if (/%[0-9A-Fa-f]{2}/.test(l.name || '')) l.name = cleanName(l.name); });
+H.matches.forEach(m => m.p.forEach(p => { if (p.squad && /%[0-9A-Fa-f]{2}/.test(p.squad.name || '')) p.squad.name = cleanName(p.squad.name); }));
 const saveH = () => { try { localStorage.setItem(HKEY, JSON.stringify(H)); } catch (e) {} };
 let toastT = 0;
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 2400); }
@@ -885,7 +888,7 @@ function parseYASB(raw) {
   }
   if (!ships.length) return { error: 'No ships found in that link.' };
   const fac = canon(fm ? fm[1] : D.pilots[ships[0].pid].f);
-  return { squad: { name: nm ? nm[1].trim() : '', faction: FACTIONS[fac] ? fac : 'none', points: +m[3] || 0, ships, source: 'YASB' }, skipped };
+  return { squad: { name: nm ? cleanName(nm[1]) : '', faction: FACTIONS[fac] ? fac : 'none', points: +m[3] || 0, ships, source: 'YASB' }, skipped };
 }
 function parseXWS(raw) {
   let j; try { j = JSON.parse(raw); } catch (e) { try { j = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1)); } catch (e2) { return { error: 'That is not valid JSON.' }; } }
@@ -917,7 +920,7 @@ function parseXWS(raw) {
   }
   if (!ships.length) return { error: 'None of the pilots in that data could be matched.' };
   const fac = canon(j.faction || D.pilots[ships[0].pid].f);
-  return { squad: { name: j.name || '', faction: FACTIONS[fac] ? fac : 'none', points: j.points || 0, ships, source: 'XWS' }, skipped };
+  return { squad: { name: cleanName(j.name), faction: FACTIONS[fac] ? fac : 'none', points: j.points || 0, ships, source: 'XWS' }, skipped };
 }
 function parseSquad(raw) {
   raw = (raw || '').trim(); if (!raw) return null;
