@@ -841,8 +841,8 @@ let IDX = null;
 function idx() {
   if (IDX) return IDX;
   IDX = { p: {}, u: {} };
-  for (const [id, p] of Object.entries(D.pilots)) { (IDX.p[p.xs + '|' + p.x] ||= []).push(+id); (IDX.p['|' + p.x] ||= []).push(+id); }
-  for (const [id, u] of Object.entries(D.upgrades)) (IDX.u[u.x] ||= []).push(+id);
+  for (const [id, p] of Object.entries(D.pilots)) { const xs = canon(p.xs), x = canon(p.x); (IDX.p[xs + '|' + x] ||= []).push(+id); (IDX.p['|' + x] ||= []).push(+id); if (x.endsWith(xs)) (IDX.p[xs + '|' + x.slice(0, -xs.length)] ||= []).push(+id); }
+  for (const [id, u] of Object.entries(D.upgrades)) (IDX.u[canon(u.x)] ||= []).push(+id);
   return IDX;
 }
 const upPoints = (u, ship) => {
@@ -898,7 +898,7 @@ function parseXWS(raw) {
   const I = idx(), ships = []; let skipped = 0;
   for (const xp of j.pilots) {
     const xs = canon(xp.ship), x = canon(xp.id);
-    let cands = (I.p[xs + '|' + x] || I.p['|' + x] || []).filter(Boolean);
+    let cands = (I.p[xs + '|' + x] || I.p[xs + '|' + x.replace(new RegExp(xs + '$'), '')] || I.p['|' + x] || []).filter(Boolean);
     if (!cands.length) { const ks = Object.keys(I.p).filter(k => k.startsWith(xs + '|') && (k.slice(xs.length + 1).startsWith(x) || x.startsWith(k.slice(xs.length + 1)))); cands = ks.flatMap(k => I.p[k]).filter(Boolean); }
     if (!cands.length) cands = Object.keys(D.pilots).filter(id => canon(D.pilots[id].n) === canon(xp.name || xp.id)).map(Number);
     const pid = cands.find(id => !/\(BoY\)/.test(D.pilots[id].n)) ?? cands[0];
