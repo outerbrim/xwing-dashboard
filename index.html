@@ -552,6 +552,23 @@ body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 
 .sqb .ln { align-items: center !important; } .sqb .ln b { font-size: 15.6px; align-self: center; }
 .ibody { display: grid; gap: 8px; padding: 6px 4px 10px; }
 .hrow[aria-expanded="true"] { background: var(--surface-3); }
+#hist-body { grid-auto-rows: max-content; align-content: start; }
+.tform { overflow: visible; }
+.tf-ms { display: grid; gap: 8px; max-height: none; overflow: visible; }
+.tf-m { position: relative; display: flex; flex-direction: column; align-items: stretch; gap: 10px; padding: 12px 12px 14px; background: var(--surface); border: 1.5px solid var(--line); border-radius: 12px; cursor: pointer; font-size: 13px; }
+.tf-m input { position: absolute; opacity: 0; pointer-events: none; }
+.tf-t { flex: 1; min-width: 0; display: grid; gap: 2px; } .tf-t small { color: var(--fg-dim); font-size: 12.5px; }
+.tf-dot { align-self: center; width: 24px; height: 24px; flex: none; border-radius: 50%; border: 2px solid var(--fg-faint); background: var(--surface-3); }
+.tf-m:has(input:checked) { border-color: var(--p1); box-shadow: 0 0 0 1px var(--p1); }
+.tf-m:has(input:checked) .tf-dot { border-color: var(--p1); background: radial-gradient(circle, var(--p1) 0 6px, transparent 7px); }
+.tf-dot { background: transparent; border-color: var(--fg-dim); }
+.tform { display: flex; flex-direction: column; gap: 8px; } .tform > * { flex: none; } .tform .name-in.box { flex: none; }
+.t-actions { position: sticky; bottom: 0; display: flex; gap: 10px; padding: 12px 0 2px; background: var(--surface); } .t-actions .btn { flex: 1; min-height: 46px; }
+.m-body .label { display: block; margin-bottom: 13px; } .m-body .rowh .label { margin-bottom: 0; } .m-body .rowh:has(.label) { margin-bottom: 13px; }
+.tf-m:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tnew { width: 100%; min-height: 48px; font-size: 15px; }
+.m-body > div > .label, .m-body > div > .rowh { margin-bottom: 8px; } .m-body > div > .label { display: block; } .tsq .label { margin-bottom: 4px; display: block; }
+.m-score .nm { align-items: flex-start; line-height: 20px; } .m-score .nm i { margin-top: 6px; }
 .g-rbar { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; }
 .g-rbar i { height: 8px; border-radius: 4px; background: var(--surface-3); overflow: hidden; display: block; }
 .g-rbar i.done { background: var(--yellow); }
@@ -632,6 +649,11 @@ body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 
 <dialog id="dlg-hist" class="wide" aria-labelledby="hist-h">
   <div class="d-head"><h3 id="hist-h">History and Stats</h3><button class="icon-btn" data-act="close" aria-label="Close"><svg class="ic" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
   <div class="d-body" id="hist-body"></div>
+</dialog>
+
+<dialog id="dlg-t" aria-labelledby="t-h">
+  <div class="d-head"><h3 id="t-h">Tournament</h3><button class="icon-btn" data-act="close" aria-label="Close"><svg class="ic" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+  <div class="d-body" id="t-body"></div>
 </dialog>
 
 <dialog id="dlg-import" aria-labelledby="imp-h">
@@ -1283,16 +1305,15 @@ function tLine(m) {
 function tForm(t) {
   const taken = new Set(H.tourn.filter(x => x.id !== t.id).flatMap(x => x.matches || [])), sel = new Set(t.matches || []);
   const avail = H.matches.filter(m => !taken.has(m.id));
-  return `<div class="match tform pad" id="tform" data-id="${t.id || ''}"><label class="label" for="tf-name">Event name</label><input class="name-in" id="tf-name" maxlength="60" value="${esc(t.name || '')}" autocomplete="off">
+  return `<div class="tform" id="tform" data-id="${t.id || ''}"><label class="label" for="tf-name">Event name</label><input class="name-in box" id="tf-name" maxlength="60" value="${esc(t.name || '')}" autocomplete="off">
     <label class="label" for="tf-date">Date</label><input class="name-in box" type="date" id="tf-date" value="${t.date || new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)}">
-    <label class="label" for="tf-loc">Location</label><input class="name-in" id="tf-loc" maxlength="60" value="${esc(t.loc || '')}" autocomplete="off">
+    <label class="label" for="tf-loc">Location</label><input class="name-in box" id="tf-loc" maxlength="60" value="${esc(t.loc || '')}" autocomplete="off">
     <label class="label" for="tf-mode">Format</label><select class="sel" id="tf-mode"><option value="person" ${t.mode !== 'online' ? 'selected' : ''}>In person</option><option value="online" ${t.mode === 'online' ? 'selected' : ''}>Online</option></select>
     <label class="label" for="tf-place">Where you placed</label><select class="sel" id="tf-place"><option value="">Not recorded</option>${PLACES.map(p => `<option ${t.place === p ? 'selected' : ''}>${p}</option>`).join('')}</select>
-    <span class="label">Matches in this event</span><div class="tf-ms">${avail.length ? avail.map(m => `<label class="tf-m"><input type="checkbox" value="${m.id}" ${sel.has(m.id) ? 'checked' : ''}><span>${dateStr(m.t)} · ${esc(fName(m.p[0].faction))} ${m.p[0].score} – ${m.p[1].score} ${esc(fName(m.p[1].faction))}</span></label>`).join('') : '<p class="txt">No matches left to add. Finish a game with Save to history on first.</p>'}</div>
-    <div class="s-actions"><button class="btn sm primary" data-act="t-save">Save</button><button class="btn sm" data-act="t-cancel">Cancel</button></div></div>`;
+    <span class="label">Matches in this event</span><div class="tf-ms">${avail.length ? avail.map(m => `<label class="tf-m"><input type="checkbox" value="${m.id}" ${sel.has(m.id) ? 'checked' : ''}><span class="tf-t"><span class="tl1"><span>${esc(m.p[0].name)}</span><b><span class="s0">${m.p[0].score}</span> – <span class="s1">${m.p[1].score}</span></b><span>${esc(m.p[1].name)}</span></span><small>${dateStr(m.t)} · ${fCol(m.p[0].faction)} vs ${fCol(m.p[1].faction)}</small></span><i class="tf-dot" aria-hidden="true"></i></label>`).join('') : '<p class="txt">No matches left to add. Finish a game with Save to history on first.</p>'}</div>
+    <div class="t-actions"><button class="btn primary" data-act="t-save">Save</button><button class="btn" data-act="t-cancel">Cancel</button></div></div>`;
 }
 function tCard(t) {
-  if (HV.te === t.id) return tForm(t);
   const r = tRec(t), open = HOPEN.has(t.id);
   return `<article class="match"><div class="m-head rowh"><button class="m-tog big" data-act="h-open" data-d="${t.id}" aria-expanded="${open}">${CHEV}<span class="tx"><span class="nm">${esc(t.name || 'Untitled event')}</span><span class="sub">${t.date ? `<span>${dateStr(new Date(t.date + 'T12:00:00').getTime())}</span>` : ''}${t.loc ? `<span>${esc(t.loc)}</span>` : ''}<span>${t.mode === 'online' ? 'Online' : 'In person'}</span><span>Result <span class="rec">${t.place || 'Not recorded'}</span></span><span>Record ${recHtml(r.w, r.l, r.d)}</span></span></span></button><button class="ibtn" data-act="t-edit" data-d="${t.id}" aria-label="Edit tournament">${PEN}</button></div>
     ${open ? `<div class="m-body"><div class="sqb">${r.ms.length ? r.ms.map(tLine).join('') : '<p class="txt">No matches added yet.</p>'}</div><div class="s-actions"><button class="btn sm danger" data-act="t-del" data-d="${t.id}">Delete tournament</button></div></div>` : ''}</article>`;
@@ -1300,9 +1321,8 @@ function tCard(t) {
 function hTourn() {
   const f = (k, l) => `<button class="btn sm" data-act="t-f" data-d="${k}" aria-pressed="${HV.tf === k}">${l}</button>`;
   const ts = H.tourn.filter(t => HV.tf === 'all' || t.mode === HV.tf);
-  return `<div class="chipset">${f('all', 'All')}${f('person', 'In person')}${f('online', 'Online')}<button class="btn sm primary push" data-act="t-edit" data-d="new">New tournament</button></div>`
-    + (HV.te === 'new' ? tForm({}) : '')
-    + (ts.length ? `<div class="list-stack">${ts.map(tCard).join('')}</div>` : HV.te === 'new' ? '' : emptyHist('No tournaments yet. Tap New tournament to group the matches from an event.'));
+  return `<button class="btn primary tnew" data-act="t-edit" data-d="new">New tournament</button><div class="chipset">${f('all', 'All')}${f('person', 'In person')}${f('online', 'Online')}</div>`
+    + (ts.length ? `<div class="list-stack">${ts.map(tCard).join('')}</div>` : emptyHist('No tournaments yet. Tap New tournament to group the matches from an event.'));
 }
 function hMatches() {
   const showP2 = () => true;
@@ -1624,14 +1644,14 @@ const A = {
   },
   'ilist'(d) { HV.openList = HV.openList === d.d ? null : d.d; renderHistory(); },
   't-f'(d) { HV.tf = d.d; renderHistory(); },
-  't-edit'(d) { HV.te = HV.te === d.d ? null : d.d; renderHistory(); },
-  't-cancel'() { HV.te = null; renderHistory(); },
+  't-edit'(d) { const t = d.d === 'new' ? {} : H.tourn.find(x => x.id === d.d); if (!t) return; HV.te = d.d; $('#t-h').textContent = d.d === 'new' ? 'New tournament' : 'Edit tournament'; $('#t-body').innerHTML = tForm(t); $('#dlg-t').showModal(); },
+  't-cancel'() { $('#dlg-t').close(); },
   't-save'() {
     const f = $('#tform'); if (!f) return;
     const id = f.dataset.id || 't_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
     const t = { id, name: $('#tf-name').value.trim() || 'Untitled event', date: $('#tf-date').value, loc: $('#tf-loc').value.trim(), mode: $('#tf-mode').value, place: $('#tf-place').value, matches: [...f.querySelectorAll('.tf-m input:checked')].map(i => i.value), u: Date.now() };
     const i = H.tourn.findIndex(x => x.id === id); if (i < 0) H.tourn.unshift(t); else H.tourn[i] = t;
-    saveH(); HV.te = null; renderHistory();
+    saveH(); HV.te = null; $('#dlg-t').close(); renderHistory();
   },
   't-del'(d) { H.tourn = H.tourn.filter(t => t.id !== d.d); H.del = [...(H.del || []), d.d].slice(-1000); saveH(); renderHistory(); },
   'l-edit'(d) { HV.le = HV.le === d.d ? null : d.d; renderHistory(); },
@@ -1715,6 +1735,7 @@ document.addEventListener('change', e => {
 });
 document.addEventListener('animationend', e => e.target.classList.remove('bump'));
 $('#imp-text').addEventListener('input', () => { impSel = null; impSelId = ''; renderImport(); });
+$('#dlg-t').addEventListener('close', () => { HV.te = null; });
 $('#imp-saved').addEventListener('change', e => { impSelId = e.target.value; const l = H.lists.find(x => x.id === impSelId); impSel = l ? rebuildList(l) : null; if (l) $('#imp-text').value = ''; renderImport(); });
 document.addEventListener('input', e => { if (e.target.id === 'end-notes' && S.result) { S.result.notes = e.target.value; save(); } });
 document.addEventListener('toggle', e => { if (e.target.matches && e.target.matches('details.scen-d')) scnOpen = e.target.open; }, true);
@@ -1765,7 +1786,7 @@ function applyP1() {
   while ((x = w.nextNode())) { const pn = x.parentNode && x.parentNode.nodeName; if (pn === 'TEXTAREA' || pn === 'SCRIPT' || pn === 'STYLE') continue; if (x.nodeValue.includes('Player 1')) x.nodeValue = x.nodeValue.replace(/Player 1/g, n); }
 }
 let NOSET = false;
-let apT = 0; new MutationObserver(() => { if (!S.settings.p1name) return; clearTimeout(apT); apT = setTimeout(applyP1, 30); }).observe(document.body, { childList: true, subtree: true, characterData: true });
+new MutationObserver(() => { if (S.settings.p1name) applyP1(); }).observe(document.body, { childList: true, subtree: true, characterData: true });
 (function boot() {
   const t = S.timer;
   if (t.status === 'running' && t.endAt <= Date.now()) { t.status = 'done'; t.remaining = 0; }
