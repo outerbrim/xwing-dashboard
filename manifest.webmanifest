@@ -1,6 +1,6 @@
 {
-  "name": "X-Wing Scorer",
-  "short_name": "X-Wing Scorer",
+  "name": "X-Wing Dashboard",
+  "short_name": "X-Wing Dashboard",
   "description": "Timer, round tracker and score keeper for X-Wing Miniatures, with YASB squad import.",
   "start_url": "./index.html",
   "scope": "./",

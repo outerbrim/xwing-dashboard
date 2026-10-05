@@ -9,13 +9,13 @@
 <meta property="og:description" content="Timer, round tracker, score keeper and match history for X-Wing Miniatures.">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="X-Wing Scorer">
+<meta name="apple-mobile-web-app-title" content="X-Wing Dashboard">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png?v=3">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html,body{margin:0}[hidden]{display:none!important}</style>
-<title>X-Wing Scorer</title>
+<title>X-Wing Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Saira+Condensed:wght@500;600;700&display=swap">
@@ -520,6 +520,18 @@ body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 
   .g-clock { flex: none; min-height: 118px; } .g-clock .g-time { font-size: min(9vw, 13vh); } .g-face { row-gap: 0; }
   .g-score { container-type: size; gap: 4px; padding: 8px 6px; } .g-num { font-size: min(50cqh, 40cqw); } .g-track { display: none; } .g-name { font-size: 13px; }
 }
+.rowh { display: flex; align-items: center; gap: 8px; }
+.m-tog { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; text-align: left; font-weight: 700; font-size: 15px; min-height: 44px; }
+.m-tog .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-tog .ic { width: 18px; height: 18px; flex: none; transition: transform .15s; } .m-tog[aria-expanded="false"] .ic { transform: rotate(-90deg); }
+.ibtn { width: 40px; height: 40px; flex: none; display: grid; place-items: center; border-radius: 10px; color: var(--fg-dim); } .ibtn .ic { width: 19px; height: 19px; } .ibtn:active { background: var(--surface-3); }
+.tform { display: flex; flex-direction: column; gap: 8px; } .tform > * { flex: none; } .tf-ms { display: block; max-height: 240px; overflow: auto; } .tf-m { display: flex; gap: 10px; align-items: center; font-size: 13.5px; padding: 6px 4px; } .tf-m input { width: 20px; height: 20px; flex: none; }
+.tile.fav { grid-column: span 2; } .tile.fav b { overflow-wrap: anywhere; }
+.phases { gap: 3px; grid-template-columns: 10.5fr 8.5fr 12.5fr 12.5fr 5.5fr; } .phase { min-height: 58px; font-size: clamp(8.5px, 2.6vw, 11px); font-weight: 600; letter-spacing: -.01em; padding: 0; overflow-wrap: normal; hyphens: none; white-space: nowrap; }
+.pip { line-height: 1; padding: 0; min-width: 0; font-size: clamp(11px, 3.6vw, 16px); text-align: center; font-variant-numeric: proportional-nums; }
+.tform { flex: none; }
+.tform .name-in { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 0 12px; min-height: 44px; font-size: 15px; width: 100%; }
+#hist-body .seg button { padding: 0 2px; font-size: 12.5px; overflow-wrap: normal; white-space: nowrap; letter-spacing: 0; }
 .g-rbar { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; }
 .g-rbar i { height: 8px; border-radius: 4px; background: var(--surface-3); overflow: hidden; display: block; }
 .g-rbar i.done { background: var(--yellow); }
@@ -656,10 +668,10 @@ const FACTIONS = {
 };
 const PHASES = [
   ['Planning', 'Everyone secretly dials a maneuver.'],
-  ['System', 'Resolve system phase abilities, then reveal dials in some games.'],
-  ['Activation', 'Ships move and act in initiative order, lowest first.'],
+  ['System', 'Resolve system phase abilities in initiative order, lowest first.'],
+  ['Activation', 'Reveal dials in initiative order, lowest first.'],
   ['Engagement', 'Ships attack in initiative order, highest first.'],
-  ['End', 'Remove tokens and check objectives. Each ship recovers 1 Force and recurring charges when you move to the next round.'],
+  ['End', 'Remove tokens and check objectives. Each ship recovers 1 force and recurring charges. Score objective points.'],
 ];
 const TOKENS = [['focus', 'Focus'], ['evade', 'Evade'], ['calc', 'Calculate'], ['lock', 'Lock'], ['stress', 'Stress'], ['strain', 'Strain'], ['ion', 'Ion'], ['jam', 'Jam'], ['tractor', 'Tractor'], ['deplete', 'Deplete']];
 const KEY = 'xwdash.v1', HKEY = 'xwdash.history.v1';
@@ -682,7 +694,7 @@ const rulesUrl = k => RULES + '#page=' + (SCENARIOS[k] ? SCENARIOS[k].page : 2);
 const newPlayer = (i) => ({ name: 'Player ' + (i + 1), faction: 'none', manual: 0, init: false, squad: null });
 const fresh = () => ({
   v: 1,
-  settings: { minutes: 75, rounds: 12, sound: true, wake: false, auto: true, target: 50, me: -1, swap: false, hideTok: false, p2stats: false, tapFilter: false },
+  settings: { minutes: 75, rounds: 12, sound: true, wake: false, auto: true, target: 50, me: -1, swap: false, hideTok: false, p2stats: false, tapFilter: false, hideTourn: false },
   timer: { status: 'idle', total: 75 * 60000, remaining: 75 * 60000, endAt: 0, warned: {} },
   round: 1, phase: 0, scenario: '', result: null,
   ui: { collapsed: [false, false], view: 'board' },
@@ -701,8 +713,8 @@ const save = () => { clearTimeout(saveT); saveT = setTimeout(() => { try { local
 
 /* ---------- history store ---------- */
 const cleanName = n => { let t = String(n ?? ''); for (let i = 0; i < 2 && /%[0-9A-Fa-f]{2}/.test(t); i++) { try { t = decodeURIComponent(t); } catch (e) { break; } } return t.trim(); };
-let H = { matches: [], lists: [], del: [] };
-try { const h = JSON.parse(localStorage.getItem(HKEY) || 'null'); if (h) H = { matches: h.matches || [], lists: h.lists || [], del: h.del || [], mig2: h.mig2 }; } catch (e) {}
+let H = { matches: [], lists: [], del: [], tourn: [] };
+try { const h = JSON.parse(localStorage.getItem(HKEY) || 'null'); if (h) H = { matches: h.matches || [], lists: h.lists || [], del: h.del || [], tourn: h.tourn || [], mig2: h.mig2 }; } catch (e) {}
 H.lists.forEach(l => { if (/%[0-9A-Fa-f]{2}/.test(l.name || '')) l.name = cleanName(l.name); });
 H.matches.forEach(m => m.p.forEach(p => { if (p.squad && /%[0-9A-Fa-f]{2}/.test(p.squad.name || '')) p.squad.name = cleanName(p.squad.name); }));
 const saveH = () => { try { localStorage.setItem(HKEY, JSON.stringify(H)); } catch (e) {} };
@@ -1018,8 +1030,8 @@ function renderRound() {
   }
   const scen = `<div class="scen"><div class="scen-row">
       <select class="sel" id="scn" data-scn aria-label="Scenario"><option value="">Choose scenario</option>${Object.entries(SCENARIOS).map(([k, v]) => `<option value="${k}" ${k === S.scenario ? 'selected' : ''}>${esc(v.n)}</option>`).join('')}</select>
-      <a class="link" href="${rulesUrl(S.scenario)}" target="_blank" rel="noopener">${sc ? 'Scenario rules' : 'Common rules'} ↗</a></div>
-      ${sc ? `<details class="scen-d" ${scnOpen ? 'open' : ''}><summary>${esc(sc.setup)} · scores from round 2</summary><p class="txt"><b>Objective.</b> ${esc(sc.obj)}</p><p class="txt"><b>Scoring.</b> ${esc(sc.score)}</p></details>` : ''}</div>`;
+      <a class="link" href="${rulesUrl(S.scenario)}" target="_blank" rel="noopener">${sc ? 'Scenario Rules' : 'Common rules'} ↗</a></div>
+      ${sc ? `<details class="scen-d" ${scnOpen ? 'open' : ''}><summary>${esc(sc.setup)} · Scores from round 2</summary><p class="txt"><b>Objective.</b> ${esc(sc.obj)}</p><p class="txt"><b>Scoring.</b> ${esc(sc.score)}</p></details>` : ''}</div>`;
   const hint = last && sc && S.round >= 2 ? 'Score the scenario now. ' + sc.score : ph;
   el.innerHTML = `
     <div class="round-head"><h2>Round ${S.round} <small>of ${n}</small></h2><span class="label">${esc(pn)} phase · first to ${t}</span></div>
@@ -1028,7 +1040,7 @@ function renderRound() {
     <div class="phases" role="group" aria-label="Phase">${PHASES.map(([p], i) => `<button class="phase ${i === S.phase ? 'now' : i < S.phase ? 'past' : ''}" data-act="phase-set" data-d="${i}">${p}</button>`).join('')}</div>
     <p class="phase-hint">${esc(hint)}</p>
     <div class="round-nav"><button class="btn" data-act="back" aria-label="Back one step">‹ Back</button>
-      <button class="btn primary" data-act="next">${last ? 'End of round: check victory ›' : 'Next phase: ' + PHASES[S.phase + 1][0] + ' ›'}</button></div>
+      <button class="btn primary" data-act="next">${last ? 'End of round: Check victory ›' : 'Next phase: ' + PHASES[S.phase + 1][0] + ' ›'}</button></div>
     <div class="round-foot"><button class="btn sm ghost" data-act="open" data-d="dlg-log">Game log</button><button class="btn sm ghost" data-act="end-now">End game</button></div>`;
   $('#hud-round').textContent = S.round + '/' + n;
 }
@@ -1106,7 +1118,7 @@ function renderPlayer(pi) {
         ${col ? '' : `<div class="sq-actions"><button class="btn sm" data-act="imp-open" data-p="${pi}">Replace</button><button class="btn sm ghost" data-act="list-save" data-p="${pi}">Save list</button><button class="btn sm ghost" data-act="heal" data-p="${pi}">Repair all</button><button class="btn sm ghost" data-act="sq-clear" data-p="${pi}">Remove</button></div>`}</div>
       ${col ? `<div class="sq-mini">${sq.ships.map(s => `<span class="mini ${shipState(s)}">${esc(s.n.replace(/^["“”]|["“”]$/g, ''))} <b><span class="hs">${s.hull}<i class="pi hu"></i></span><span class="hs">${s.sh}<i class="pi sh"></i></span></b></span>`).join('')}</div>` : sq.ships.map((s, si) => shipHTML(pi, si, s)).join('')}
     </div>` : `
-    <div class="squad"><div class="empty"><p>Import a list from Yet Another Squad Builder to track hull, shields, charges and points per ship.</p>
+    <div class="squad"><div class="empty"><p>Import a list from YASB or LBN to track hull, shields, charges and points per ship.</p>
       <button class="btn primary" data-act="imp-open" data-p="${pi}"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v3h16v-3"/></svg>Import squad</button></div></div>`;
   return `
   <section class="card player" data-i="${pi}" aria-label="${esc(p.name)}">
@@ -1138,7 +1150,7 @@ function renderAll() {
   document.documentElement.classList.toggle('swap', !!S.settings.swap);
   renderRound(); renderPlayers(); renderGlance(); renderTimerStatic(); tickUI();
   $('#undo').disabled = !undoStack.length;
-  $('#foot').textContent = `Card data from YASB ${D.v}, built ${D.built || ''}. Pilot and upgrade stats come from there.`;
+  $('#foot').innerHTML = `<a class="link" href="https://etsy.com/shop/OuterBrimTokens" target="_blank" rel="noopener">Etsy Shop ↗</a><br>Card data from YASB ${esc(String(D.v).replace(/^(\d+).*/, '$1'))}, built ${esc(D.built || '')}.<br>Pilot and upgrade points and information are sourced from YASB`;
   if ($('#dlg-set').open) renderSettings();
   if ($('#dlg-end').open && !(document.activeElement && document.activeElement.id === 'end-notes')) renderEnd();
   if ($('#dlg-hist').open) renderHistory();
@@ -1177,8 +1189,9 @@ function renderSettings() {
     ${sw('wake', s.wake, 'Keep screen awake', 'While the timer runs, where the device allows it.')}
     ${sw('auto', s.auto, 'Score from ship damage', 'Opponent scores half the cost (rounded down) when a ship first drops to half hull and shields, and the rest when it is destroyed.')}
     <div class="field"><span class="label">Stats</span></div>
-    ${sw('p2stats', s.p2stats, 'Show Player 2 results', 'Include Player 2\'s lists and results in the stats window. Off by default, so stats only show Player 1.')}
+    ${sw('p2stats', s.p2stats, 'Show Player 2 stats', 'Include Player 2\'s results in the stats window. Off by default, so stats only show Player 1.')}
     ${sw('tapFilter', s.tapFilter, 'Tap to filter', 'Turn on to tap a pilot, upgrade, list or matchup in Insights and filter everything to just those games.')}
+    ${sw('hideTourn', s.hideTourn, 'Hide Tournaments', 'Hides the Tournaments tab in History and Stats.')}
     <div class="field"><span class="label">Shortcuts</span><div class="keys"><kbd>Space</kbd><span>Start or pause the timer</span><kbd>→ / ←</kbd><span>Next or previous step</span><kbd>Z</kbd><span>Undo</span><kbd>G</kbd><span>At a glance screen</span></div></div>
     <button class="btn danger" data-act="reset-all" id="reset-all">Reset everything</button>`;
 }
@@ -1204,7 +1217,7 @@ function renderImport() {
 let impTarget = 0, impParsed = null, impSel = null, impSelId = '';
 
 /* ---------- history screens ---------- */
-const HV = { pl: [true, true], tab: 'matches', fac: 'all', scope: 'all', drill: {}, upSlot: '' };
+const HV = { te: null, tf: 'all', le: null, pl: [true, true], tab: 'matches', fac: 'all', scope: 'all', drill: {}, upSlot: '' };
 function loadSample() {
   const smp = window.XW_SAMPLE; if (!smp) return null; let m = 0, l = 0;
   smp.matches.forEach(x => { if (!H.matches.some(y => y.id === x.id)) { H.matches.push(JSON.parse(JSON.stringify(x))); m++; } });
@@ -1218,8 +1231,8 @@ const fName = f => (FACTIONS[f] || FACTIONS.none).n;
 const fDot = f => `<span class="fdot" style="background:${(FACTIONS[f] || FACTIONS.none).c}"></span>`;
 const pct = (a, b) => Math.round(100 * a / Math.max(1, b));
 const dateStr = t => new Date(t).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
-function facChips() {
-  const fs = [...new Set(H.matches.flatMap(m => m.p.filter((p, i) => showP2() || i === 0).map(p => p.faction)).concat(H.lists.filter(l => showP2() || listPl(l) !== 1).map(l => l.faction)))];
+function facChips(allP = false) {
+  const fs = [...new Set(H.matches.flatMap(m => m.p.filter((p, i) => allP || showP2() || i === 0).map(p => p.faction)).concat(allP ? [] : H.lists.filter(l => showP2() || listPl(l) !== 1).map(l => l.faction)))];
   if (HV.fac !== 'all' && !fs.includes(HV.fac)) HV.fac = 'all';
   return `<div class="chipset"><button class="btn sm" data-act="h-fac" data-d="all" aria-pressed="${HV.fac === 'all'}">All factions</button>${fs.map(f => `<button class="btn sm" data-act="h-fac" data-d="${f}" aria-pressed="${HV.fac === f}">${fDot(f)}${esc(fName(f))}</button>`).join('')}</div>`;
 }
@@ -1233,10 +1246,45 @@ function squadBlock(sq) {
     return `<div class="ln"><span>${esc(s.n)}<small>${esc(s.ship)} · initiative ${s.init}${lo != null ? ' · loadout ' + load + '/' + lo : ''}</small>${s.ups.length ? `<small>${esc(s.ups.map(u => u.n + ' (' + upCostOf(u) + ')').join(', '))}</small>` : ''}${s.end && s.end !== 'ok' ? `<small>${s.end === 'dead' ? 'Destroyed' : 'Reached half health'}</small>` : ''}</span><b>${s.pts}</b></div>`;
   }).join('')}</div>`;
 }
+const PEN = '<svg class="ic" viewBox="0 0 24 24"><path d="M11 4H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-6"/><path d="M18.4 2.6a2 2 0 0 1 2.9 2.9L12 14.8 8 16l1.2-4z"/></svg>';
+const CHEV = '<svg class="ic" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>';
+const PLACES = ['Top 32', 'Top 16', 'Top 8', 'Top 4', 'Top 2', 'Winner'];
+const tMatch = id => H.matches.find(m => m.id === id);
+const tRes = m => { const me = m.me >= 0 ? m.me : 0; return m.winner < 0 ? 'D' : m.winner === me ? 'W' : 'L'; };
+function tRec(t) { const r = { w: 0, l: 0, d: 0, ms: (t.matches || []).map(tMatch).filter(Boolean) }; r.ms.forEach(m => { const x = tRes(m); if (x === 'W') r.w++; else if (x === 'L') r.l++; else r.d++; }); return r; }
+function tLine(m) {
+  const f = i => `${esc(m.p[i].name)} (${esc(fName(m.p[i].faction))})`, x = tRes(m);
+  return `<div class="ln"><span>${f(0)} <b>${m.p[0].score} – ${m.p[1].score}</b> ${f(1)}<small>${dateStr(m.t)} · ${SCENARIOS[m.scenario] ? esc(SCENARIOS[m.scenario].n) : 'No scenario'} · ${x === 'W' ? 'Win' : x === 'L' ? 'Loss' : 'Draw'}</small></span></div>`;
+}
+function tForm(t) {
+  const taken = new Set(H.tourn.filter(x => x.id !== t.id).flatMap(x => x.matches || [])), sel = new Set(t.matches || []);
+  const avail = H.matches.filter(m => !taken.has(m.id));
+  return `<div class="match tform" id="tform" data-id="${t.id || ''}"><label class="label" for="tf-name">Event name</label><input class="name-in" id="tf-name" maxlength="60" value="${esc(t.name || '')}" autocomplete="off">
+    <label class="label" for="tf-loc">Location</label><input class="name-in" id="tf-loc" maxlength="60" value="${esc(t.loc || '')}" autocomplete="off">
+    <label class="label" for="tf-mode">Format</label><select class="sel" id="tf-mode"><option value="person" ${t.mode !== 'online' ? 'selected' : ''}>In person</option><option value="online" ${t.mode === 'online' ? 'selected' : ''}>Online</option></select>
+    <label class="label" for="tf-place">Where you placed</label><select class="sel" id="tf-place"><option value="">Not recorded</option>${PLACES.map(p => `<option ${t.place === p ? 'selected' : ''}>${p}</option>`).join('')}</select>
+    <span class="label">Matches in this event</span><div class="tf-ms">${avail.length ? avail.map(m => `<label class="tf-m"><input type="checkbox" value="${m.id}" ${sel.has(m.id) ? 'checked' : ''}><span>${dateStr(m.t)} · ${esc(fName(m.p[0].faction))} ${m.p[0].score} – ${m.p[1].score} ${esc(fName(m.p[1].faction))}</span></label>`).join('') : '<p class="txt">No matches left to add. Finish a game with Save to history on first.</p>'}</div>
+    <div class="s-actions"><button class="btn sm primary" data-act="t-save">Save</button><button class="btn sm" data-act="t-cancel">Cancel</button></div></div>`;
+}
+function tCard(t) {
+  if (HV.te === t.id) return tForm(t);
+  const r = tRec(t), open = HOPEN.has(t.id);
+  return `<article class="match"><div class="m-head rowh"><button class="m-tog" data-act="h-open" data-d="${t.id}" aria-expanded="${open}">${CHEV}<span class="nm">${esc(t.name || 'Untitled event')}</span></button><button class="ibtn" data-act="t-edit" data-d="${t.id}" aria-label="Edit tournament">${PEN}</button></div>
+    <div class="m-meta">${t.loc ? `<span>${esc(t.loc)}</span>` : ''}<span>${t.mode === 'online' ? 'Online' : 'In person'}</span><span>Result <span class="rec">${t.place || 'Not recorded'}</span></span><span>Record <span class="rec">${r.w}–${r.l}${r.d ? '–' + r.d : ''}</span></span></div>
+    ${open ? `<div class="m-body"><div class="sqb">${r.ms.length ? r.ms.map(tLine).join('') : '<p class="txt">No matches added yet.</p>'}</div><div class="s-actions"><button class="btn sm danger" data-act="t-del" data-d="${t.id}">Delete tournament</button></div></div>` : ''}</article>`;
+}
+function hTourn() {
+  const f = (k, l) => `<button class="btn sm" data-act="t-f" data-d="${k}" aria-pressed="${HV.tf === k}">${l}</button>`;
+  const ts = H.tourn.filter(t => HV.tf === 'all' || t.mode === HV.tf);
+  return `<div class="chipset">${f('all', 'All')}${f('person', 'In person')}${f('online', 'Online')}<button class="btn sm primary" data-act="t-edit" data-d="new">New tournament</button></div>`
+    + (HV.te === 'new' ? tForm({}) : '')
+    + (ts.length ? `<div class="list-stack">${ts.map(tCard).join('')}</div>` : HV.te === 'new' ? '' : emptyHist('No tournaments yet. Tap New tournament to group the matches from an event.'));
+}
 function hMatches() {
+  const showP2 = () => true;
   if (!H.matches.length) return emptyHist('No matches saved yet. When a game ends, leave "Save to history" on and choose Finish.');
   const ms = H.matches.filter(m => HV.fac === 'all' || (showP2() ? m.p.some(p => p.faction === HV.fac) : m.p[0].faction === HV.fac));
-  return facChips() + (ms.length ? `<div class="list-stack">${ms.map(m => {
+  return facChips(true) + (ms.length ? `<div class="list-stack">${ms.map(m => {
     const open = HOPEN.has(m.id), sc = SCENARIOS[m.scenario], side = (i, r) => `<div class="side s${i} ${r ? 'r' : ''} ${m.winner === i ? 'won' : ''}"><span class="nm"><i></i>${esc(m.p[i].name)}</span><small>${esc(fName(m.p[i].faction))}${m.p[i].squad ? ' · ' + m.p[i].squad.cost + ' pts' : ''}</small></div>`;
     return `<article class="match"><button class="m-head" data-act="h-open" data-d="${m.id}" aria-expanded="${open}">
       <div class="m-meta"><span>${dateStr(m.t)}</span><span>${sc ? esc(sc.n) : 'No scenario'}</span><span>Round ${m.round}</span>${m.sample ? '<span class="chip">Sample</span>' : ''}<span>${m.winner < 0 ? 'Draw' : showP2() ? esc(m.p[m.winner].name) + ' won' : m.winner === 0 ? 'Won' : 'Lost'}</span>${m.me >= 0 && (showP2() || m.me === 0) ? `<span class="chip">I played ${esc(m.p[m.me].name)}</span>` : ''}</div>
@@ -1255,10 +1303,10 @@ function hLists() {
     const tot = by[f].reduce((a, l) => { const r = recordOf(l.sig); a.w += r.w; a.l += r.l; a.d += r.d; return a; }, { w: 0, l: 0, d: 0 });
     return `<h4 class="grp">${fDot(f)}${esc(fName(f))} <small>${by[f].length} list${by[f].length > 1 ? 's' : ''} · record ${tot.w}–${tot.l}${tot.d ? '–' + tot.d : ''}</small></h4>
       <div class="list-stack">${by[f].map(l => { const r = recordOf(l.sig);
-        return `<article class="match"><div class="m-head"><input class="name-in sm" data-lname="${l.id}" value="${esc(l.name)}" maxlength="40" aria-label="List name" autocomplete="off">
+        return `<article class="match"><div class="m-head rowh"><button class="m-tog" data-act="h-open" data-d="${l.id}" aria-expanded="${HOPEN.has(l.id)}">${CHEV}<span class="nm">${esc(l.name)}</span></button><button class="ibtn" data-act="l-edit" data-d="${l.id}" aria-label="Edit list name">${PEN}</button></div>${HV.le === l.id ? `<div class="rowh"><input class="name-in sm" data-lname="${l.id}" value="${esc(l.name)}" maxlength="40" aria-label="List name" autocomplete="off"><button class="btn sm primary" data-act="l-edit" data-d="${l.id}">Done</button></div>` : ''}<div class="lm">
           <div class="m-meta"><span>${l.points} pts</span><span>${l.ships.length} ship${l.ships.length > 1 ? 's' : ''}</span><span>Record <span class="rec">${r.w}–${r.l}${r.d ? '–' + r.d : ''}</span></span><span>${dateStr(l.saved)}</span>${l.sample ? '<span class="chip">Sample</span>' : ''}</div></div>
-          <div class="m-body"><div class="sqb">${l.ships.map(x => { const p = D.pilots[x.pid]; return p ? `<div class="ln"><span>${esc(p.n)}<small>${esc(p.sh)}${x.ups.length ? ' · ' + esc(x.ups.map(u => (D.upgrades[u] || {}).n || '?').join(', ')) : ''}</small></span></div>` : ''; }).join('')}</div>
-          <div class="s-actions"><button class="btn sm primary" data-act="list-use" data-d="${l.id}" data-p="0">Use as ${esc(P[0].name)}</button><button class="btn sm" data-act="list-use" data-d="${l.id}" data-p="1">Use as ${esc(P[1].name)}</button><button class="btn sm danger" data-act="list-del" data-d="${l.id}">Delete</button></div></div></article>`; }).join('')}</div>`;
+          ${HOPEN.has(l.id) ? `<div class="m-body"><div class="sqb">${l.ships.map(x => { const p = D.pilots[x.pid]; return p ? `<div class="ln"><span>${esc(p.n)}<small>${esc(p.sh)}${x.ups.length ? ' · ' + esc(x.ups.map(u => (D.upgrades[u] || {}).n || '?').join(', ')) : ''}</small></span></div>` : ''; }).join('')}</div>
+          <div class="s-actions"><button class="btn sm primary" data-act="list-use" data-d="${l.id}" data-p="0">Use as ${esc(P[0].name)}</button><button class="btn sm" data-act="list-use" data-d="${l.id}" data-p="1">Use as ${esc(P[1].name)}</button><button class="btn sm danger" data-act="list-del" data-d="${l.id}">Delete</button></div></div>` : ''}</article>`; }).join('')}</div>`;
   }).join('');
 }
 function entries() {
@@ -1301,10 +1349,16 @@ function irow0(r, k, v, lost) {
 }
 const hhead = (a) => `<div class="hrow hh"><span>${a}</span><span style="text-align:right">Used</span><span style="text-align:right">W–L</span><span style="text-align:right">Win</span></div>`;
 let HFOLD = new Set(); try { HFOLD = new Set(JSON.parse(localStorage.getItem('xwdash.hfold') || '[]')); } catch (e) {}
+function favTile(es) {
+  const c = {}; es.forEach(e => { c[e.f] = (c[e.f] || 0) + 1; });
+  const top = Object.entries(c).sort((a, b) => b[1] - a[1])[0]; if (!top) return '';
+  const f = top[0], nm = fName(f).replace(/^Galactic /, '').replace(/ Alliance$/, '').replace(/ and Villainy$/, ''), col = (FACTIONS[f] || FACTIONS.none).c;
+  return `<div class="tile fav"><b style="color:${col}">${esc(nm)}</b><span>is your favourite faction</span></div>`;
+}
 function section(key, title, note, rows, head, extra = '') {
   if (!rows.length) return '';
   const open = !HFOLD.has(key);
-  return `<div class="sec-h"><button class="sec-t" data-act="h-fold" data-d="${key}" aria-expanded="${open}"><svg class="ic" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg><h4>${title}</h4></button><small>${note}</small></div>${open ? `${extra}<div class="list-stack">${hhead(head)}${rows.join('')}</div>` : ''}`;
+  return `<div class="sec-h"><button class="sec-t" data-act="h-fold" data-d="${key}" aria-expanded="${open}"><svg class="ic" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg><h4>${title}</h4></button></div>${open ? `${extra}${key === 'pairs' ? '<p class="txt">Combinations used more than once.</p>' : ''}<div class="list-stack">${hhead(head)}${rows.join('')}</div>` : ''}`;
 }
 function pieSection(es) {
   const m = new Map(); es.forEach(e => { if (!m.has(e.f)) m.set(e.f, new Set()); m.get(e.f).add(e.squad.sig); });
@@ -1318,7 +1372,7 @@ function pieSection(es) {
     return `<path d="${d}" fill="${p.c}" stroke="var(--surface)" stroke-width="2"/>`;
   }).join('');
   const key = parts.map(p => `<div class="pie-l"><i style="background:${p.c}"></i><span>${esc(fName(p.f))}</span><b>${p.n}</b><small>${pct(p.n, tot)}%</small></div>`).join('');
-  return `<div class="sec-h"><button class="sec-t" data-act="h-fold" data-d="pie" aria-expanded="${open}"><svg class="ic" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg><h4>List Breakdown</h4></button><small>How many different lists you have used from each faction.</small></div>${open ? `<div class="pie"><svg viewBox="-90 -90 180 180" role="img" aria-label="Lists used by faction">${slices}</svg><div class="pie-k">${key}</div></div>` : ''}`;
+  return `<div class="sec-h"><button class="sec-t" data-act="h-fold" data-d="pie" aria-expanded="${open}"><svg class="ic" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg><h4>List Breakdown</h4></button></div>${open ? `<div class="pie"><svg viewBox="-90 -90 180 180" role="img" aria-label="Lists used by faction">${slices}</svg><div class="pie-k">${key}</div></div>` : ''}`;
 }
 function hInsights() {
   if (!H.matches.some(m => m.p.some(p => p.squad))) return emptyHist('Stats appear once you have saved matches with lists loaded.');
@@ -1332,7 +1386,7 @@ function hInsights() {
   if (!es.length) return controls + emptyHist('No lists match these filters.');
   const w = es.filter(e => e.res === 'w').length, ships = es.flatMap(e => shipsOfE(e)), lost = ships.filter(s => s.end === 'dead').length;
   const nUp = ships.reduce((a, s) => a + s.ups.length, 0);
-  const tiles = `<div class="tiles"><div class="tile"><b>${es.length}</b><span>lists flown</span></div><div class="tile"><b>${pct(w, es.length)}%</b><span>win rate (${w} of ${es.length})</span></div><div class="tile"><b>${(es.reduce((a, e) => a + e.score, 0) / es.length).toFixed(1)}</b><span>average score</span></div><div class="tile"><b>${pct(lost, ships.length)}%</b><span>of ships destroyed</span></div><div class="tile"><b>${ships.length ? (nUp / ships.length).toFixed(1) : '0'}</b><span>upgrades per ship</span></div><div class="tile"><b>${(es.reduce((a, e) => a + e.squad.cost, 0) / es.length).toFixed(1)}</b><span>average squad points</span></div><div class="tile"><b>${(es.reduce((a, e) => a + e.m.p[e.i].manual, 0) / es.length).toFixed(1)} / ${(es.reduce((a, e) => a + e.m.p[e.i].ships, 0) / es.length).toFixed(1)}</b><span>mission / ship points per game</span></div></div>`;
+  const tiles = `<div class="tiles"><div class="tile"><b>${es.length}</b><span>lists flown</span></div><div class="tile"><b>${pct(w, es.length)}%</b><span>win rate (${w} of ${es.length})</span></div><div class="tile"><b>${(es.reduce((a, e) => a + e.score, 0) / es.length).toFixed(1)}</b><span>average score</span></div><div class="tile"><b>${pct(lost, ships.length)}%</b><span>of ships destroyed</span></div><div class="tile"><b>${ships.length ? (nUp / ships.length).toFixed(1) : '0'}</b><span>upgrades per ship</span></div><div class="tile"><b>${Math.round(es.reduce((a, e) => a + e.m.p[e.i].manual, 0) / es.length)} / ${Math.round(es.reduce((a, e) => a + e.m.p[e.i].ships, 0) / es.length)}</b><span>mission / ship points per game</span></div>${favTile(es)}</div>`;
   const top = (arr, n = 12) => arr.slice(0, n);
   const pilots = agg(es, e => shipsOfE(e).map(s => ({ id: s.pid, label: s.n, sub: s.ship + ' · ' + s.pts + ' pts', down: s.end === 'dead' })));
   const shipsA = agg(es, e => shipsOfE(e).map(s => ({ id: s.ship, label: s.ship, sub: '', down: s.end === 'dead' })));
@@ -1377,6 +1431,8 @@ function logout() { AUTH = null; try { localStorage.removeItem(AKEY); } catch (e
 function mergeH(j) {
   let m = 0, l = 0;
   const gone = new Set([...(H.del || []), ...(j.del || [])]); H.del = [...gone].slice(-1000); H.matches = H.matches.filter(x => !gone.has(x.id));
+  H.tourn = (H.tourn || []).filter(t => !gone.has(t.id));
+  (j.tourn || []).forEach(t => { if (!t || !t.id || gone.has(t.id)) return; const i = H.tourn.findIndex(x => x.id === t.id); if (i < 0) H.tourn.push(t); else if ((t.u || 0) > (H.tourn[i].u || 0)) H.tourn[i] = t; });
   (j.matches || []).forEach(x => { if (x && x.id && x.p && !gone.has(x.id) && !H.matches.some(y => y.id === x.id)) { H.matches.push(x); m++; } });
   (j.lists || []).forEach(x => { if (x && x.sig && !H.lists.some(y => y.sig === x.sig)) { H.lists.push(x); l++; } });
   H.matches.sort((a, b) => b.t - a.t); return [m, l];
@@ -1389,7 +1445,7 @@ async function syncNow() {
     if (r.status === 401) { logout(); toast('Session expired. Log in again'); return; }
     if (!r.ok) throw 0;
     const [m, l] = mergeH(await r.json()); saveH();
-    const body = JSON.stringify({ matches: H.matches.filter(x => !x.sample), lists: H.lists.filter(x => !x.sample), del: H.del || [] });
+    const body = JSON.stringify({ matches: H.matches.filter(x => !x.sample), lists: H.lists.filter(x => !x.sample), del: H.del || [], tourn: H.tourn || [] });
     const w = await fetch('/api/sync', { method: 'PUT', headers: hd, body });
     if (!w.ok) throw 0;
     toast(`Synced. Added ${m} matches and ${l} lists from your account`);
@@ -1408,10 +1464,10 @@ function hBackup() {
     <div class="chipset"><button class="btn sm" data-act="h-copy">Copy backup</button><button class="btn sm" data-act="h-restore">Restore from pasted backup</button></div></div></details>`;
 }
 function renderHistory() {
-  const tabs = [['matches', 'Matches'], ['lists', 'Lists'], ['insights', 'Insights']];
+  const tabs = [['matches', 'Matches']].concat(S.settings.hideTourn ? [] : [['tourn', 'Tournaments']], [['lists', 'Lists'], ['insights', 'Insights']]);
   const keep = $('#bk-text') ? $('#bk-text').value : '', open = document.querySelector('details.bk')?.open;
   $('#hist-body').innerHTML = `<div class="seg" role="tablist">${tabs.map(([k, l]) => `<button role="tab" data-act="h-tab" data-d="${k}" aria-pressed="${HV.tab === k}">${l}</button>`).join('')}</div>`
-    + (HV.tab === 'matches' ? hMatches() : HV.tab === 'lists' ? hLists() : hInsights()) + hBackup();
+    + (HV.tab === 'matches' ? hMatches() : HV.tab === 'tourn' && !S.settings.hideTourn ? hTourn() : HV.tab === 'lists' ? hLists() : HV.tab === 'insights' ? hInsights() : hMatches()) + hBackup();
   if (keep) $('#bk-text').value = keep; if (open) document.querySelector('details.bk').open = true;
 }
 
@@ -1487,7 +1543,7 @@ const A = {
   },
   'tok-hide'() { S.settings.hideTok = !S.settings.hideTok; save(); renderAll(); },
   'h-pl'(d) { const i = +d.d; if (HV.pl[i] && !HV.pl[1 - i]) return toast('Keep at least one player on'); HV.pl[i] = !HV.pl[i]; renderHistory(); },
-  'set-toggle'(d) { S.settings[d.d] = !S.settings[d.d]; if (d.d === 'tapFilter' && !S.settings.tapFilter) HV.drill = {}; if (d.d === 'p2stats' || d.d === 'tapFilter') { try { renderHistory(); } catch (e) {} } if (d.d === 'sound' && S.settings.sound) { audio(); beep(1); } save(); wake(); renderAll(); },
+  'set-toggle'(d) { S.settings[d.d] = !S.settings[d.d]; if (d.d === 'tapFilter' && !S.settings.tapFilter) HV.drill = {}; if (d.d === 'p2stats' || d.d === 'tapFilter' || d.d === 'hideTourn') { if (S.settings.hideTourn && HV.tab === 'tourn') HV.tab = 'matches'; try { renderHistory(); } catch (e) {} } if (d.d === 'sound' && S.settings.sound) { audio(); beep(1); } save(); wake(); renderAll(); },
   'set-min'(d) { setMinutes(+d.d); },
   'set-min-in'() { setMinutes(+$('#min-in').value); },
   'set-rounds'() { const n = clamp(Math.round(+$('#rounds-in').value) || 12, 1, 30); S.settings.rounds = n; S.round = Math.min(S.round, n); save(); renderAll(); },
@@ -1525,6 +1581,18 @@ const A = {
   'h-tab'(d) { HV.tab = d.d; renderHistory(); },
   'h-fac'(d) { HV.fac = d.d; renderHistory(); },
   'h-scope'(d) { HV.scope = d.d; renderHistory(); },
+  't-f'(d) { HV.tf = d.d; renderHistory(); },
+  't-edit'(d) { HV.te = HV.te === d.d ? null : d.d; renderHistory(); },
+  't-cancel'() { HV.te = null; renderHistory(); },
+  't-save'() {
+    const f = $('#tform'); if (!f) return;
+    const id = f.dataset.id || 't_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+    const t = { id, name: $('#tf-name').value.trim() || 'Untitled event', loc: $('#tf-loc').value.trim(), mode: $('#tf-mode').value, place: $('#tf-place').value, matches: [...f.querySelectorAll('.tf-m input:checked')].map(i => i.value), u: Date.now() };
+    const i = H.tourn.findIndex(x => x.id === id); if (i < 0) H.tourn.unshift(t); else H.tourn[i] = t;
+    saveH(); HV.te = null; renderHistory();
+  },
+  't-del'(d) { H.tourn = H.tourn.filter(t => t.id !== d.d); H.del = [...(H.del || []), d.d].slice(-1000); saveH(); renderHistory(); },
+  'l-edit'(d) { HV.le = HV.le === d.d ? null : d.d; renderHistory(); },
   'h-open'(d) { HOPEN.has(d.d) ? HOPEN.delete(d.d) : HOPEN.add(d.d); renderHistory(); },
   'h-del'(d, b) { confirmTap(b, 'Tap again to delete', () => { H.matches = H.matches.filter(m => m.id !== d.d); H.del = [...(H.del || []), d.d].slice(-1000); saveH(); renderHistory(); }); },
   drill(d) { if (!S.settings.tapFilter) return;
