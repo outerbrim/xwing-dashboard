@@ -537,14 +537,16 @@ body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 
 .m-tog .tx { display: grid; gap: 2px; min-width: 0; line-height: 1.15; }
 .m-tog .nm { font-size: 15px; } .m-tog.big .nm { font-size: 19px; }
 .m-tog .sub { display: flex; flex-wrap: wrap; gap: 1px 10px; font-size: 13.1px; font-weight: 500; color: var(--fg-dim); line-height: 1.25; }
-.cw { color: #2c76ee; font-weight: 700; } .cl { color: var(--p2); font-weight: 700; }
+.cw { color: var(--p1); font-weight: 700; } .cl { color: var(--p2); font-weight: 700; }
 .pad { padding: 14px; } .rowh.pad { padding: 4px 14px 10px; } .rowh.wrap { flex-wrap: wrap; }
 .name-in.box { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 0 12px; min-height: 44px; font-size: 15px; width: 100%; flex: 1 1 140px; }
 .push { margin-left: auto; }
 .ibtn.sm { width: 34px; height: 34px; }
 .tmrow { display: grid; gap: 6px; } .tmrow > .ln.tl { width: 100%; text-align: left; align-items: center; }
 .ln.tl .tl1 { font-size: 14.3px; font-weight: 600; display: block; } .ln.tl small { margin-top: 2px; }
-.tl1 .s0, .m-score .sc .s0 { color: #2c76ee; } .tl1 .s1, .m-score .sc .s1 { color: var(--p2); }
+.tl1 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 0; } .tl1 b { padding: 0 18px; white-space: nowrap; font-size: 15.5px; }
+.m-tog div.nm, div.m-tog { cursor: default; } .name-in.box.inl { min-height: 34px; padding: 0 8px; font-weight: 700; flex: none; width: 100%; }
+.tl1 .s0, .m-score .sc .s0 { color: var(--p1); } .tl1 .s1, .m-score .sc .s1 { color: var(--p2); }
 .tsq { display: grid; gap: 6px; padding: 4px 4px 8px; }
 .m-score { align-items: start !important; } .m-score .sc { align-self: center; }
 .sqb .ln { align-items: center !important; } .sqb .ln b { font-size: 15.6px; align-self: center; }
@@ -1275,13 +1277,14 @@ const tMatch = id => H.matches.find(m => m.id === id);
 const tRes = m => { const me = m.me >= 0 ? m.me : 0; return m.winner < 0 ? 'D' : m.winner === me ? 'W' : 'L'; };
 function tRec(t) { const r = { w: 0, l: 0, d: 0, ms: (t.matches || []).map(tMatch).filter(Boolean) }; r.ms.forEach(m => { const x = tRes(m); if (x === 'W') r.w++; else if (x === 'L') r.l++; else r.d++; }); return r; }
 function tLine(m) {
-  const f = i => `${esc(m.p[i].name)} (${fCol(m.p[i].faction)})`, x = tRes(m), k = 'tm_' + m.id, open = HOPEN.has(k);
-  return `<div class="tmrow"><button class="ln tl" data-act="h-open" data-d="${k}" aria-expanded="${open}"><span><span class="tl1">${f(0)} <b><span class="s0">${m.p[0].score}</span> – <span class="s1">${m.p[1].score}</span></b> ${f(1)}</span><small>${dateStr(m.t)} · ${SCENARIOS[m.scenario] ? esc(SCENARIOS[m.scenario].n) : 'No scenario'} · ${x === 'W' ? '<span class="cw">Win</span>' : x === 'L' ? '<span class="cl">Loss</span>' : 'Draw'}</small></span></button>${open ? [0, 1].map(i => `<div class="tsq"><span class="label">${esc(m.p[i].name)} · ${fCol(m.p[i].faction)}</span>${squadBlock(m.p[i].squad)}</div>`).join('') : ''}</div>`;
+  const x = tRes(m), k = 'tm_' + m.id, open = HOPEN.has(k);
+  return `<div class="tmrow"><button class="ln tl" data-act="h-open" data-d="${k}" aria-expanded="${open}"><span><span class="tl1"><span>${esc(m.p[0].name)}</span><b><span class="s0">${m.p[0].score}</span> – <span class="s1">${m.p[1].score}</span></b><span>${esc(m.p[1].name)}</span></span><small>${fCol(m.p[0].faction)} vs ${fCol(m.p[1].faction)} · ${SCENARIOS[m.scenario] ? esc(SCENARIOS[m.scenario].n) : 'No scenario'} · ${x === 'W' ? '<span class="cw">Win</span>' : x === 'L' ? '<span class="cl">Loss</span>' : 'Draw'}</small></span></button>${open ? [0, 1].map(i => `<div class="tsq"><span class="label">${esc(m.p[i].name)} · ${fCol(m.p[i].faction)}</span>${squadBlock(m.p[i].squad)}</div>`).join('') : ''}</div>`;
 }
 function tForm(t) {
   const taken = new Set(H.tourn.filter(x => x.id !== t.id).flatMap(x => x.matches || [])), sel = new Set(t.matches || []);
   const avail = H.matches.filter(m => !taken.has(m.id));
   return `<div class="match tform pad" id="tform" data-id="${t.id || ''}"><label class="label" for="tf-name">Event name</label><input class="name-in" id="tf-name" maxlength="60" value="${esc(t.name || '')}" autocomplete="off">
+    <label class="label" for="tf-date">Date</label><input class="name-in box" type="date" id="tf-date" value="${t.date || new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)}">
     <label class="label" for="tf-loc">Location</label><input class="name-in" id="tf-loc" maxlength="60" value="${esc(t.loc || '')}" autocomplete="off">
     <label class="label" for="tf-mode">Format</label><select class="sel" id="tf-mode"><option value="person" ${t.mode !== 'online' ? 'selected' : ''}>In person</option><option value="online" ${t.mode === 'online' ? 'selected' : ''}>Online</option></select>
     <label class="label" for="tf-place">Where you placed</label><select class="sel" id="tf-place"><option value="">Not recorded</option>${PLACES.map(p => `<option ${t.place === p ? 'selected' : ''}>${p}</option>`).join('')}</select>
@@ -1291,7 +1294,7 @@ function tForm(t) {
 function tCard(t) {
   if (HV.te === t.id) return tForm(t);
   const r = tRec(t), open = HOPEN.has(t.id);
-  return `<article class="match"><div class="m-head rowh"><button class="m-tog big" data-act="h-open" data-d="${t.id}" aria-expanded="${open}">${CHEV}<span class="tx"><span class="nm">${esc(t.name || 'Untitled event')}</span><span class="sub">${t.loc ? `<span>${esc(t.loc)}</span>` : ''}<span>${t.mode === 'online' ? 'Online' : 'In person'}</span><span>Result <span class="rec">${t.place || 'Not recorded'}</span></span><span>Record ${recHtml(r.w, r.l, r.d)}</span></span></span></button><button class="ibtn" data-act="t-edit" data-d="${t.id}" aria-label="Edit tournament">${PEN}</button></div>
+  return `<article class="match"><div class="m-head rowh"><button class="m-tog big" data-act="h-open" data-d="${t.id}" aria-expanded="${open}">${CHEV}<span class="tx"><span class="nm">${esc(t.name || 'Untitled event')}</span><span class="sub">${t.date ? `<span>${dateStr(new Date(t.date + 'T12:00:00').getTime())}</span>` : ''}${t.loc ? `<span>${esc(t.loc)}</span>` : ''}<span>${t.mode === 'online' ? 'Online' : 'In person'}</span><span>Result <span class="rec">${t.place || 'Not recorded'}</span></span><span>Record ${recHtml(r.w, r.l, r.d)}</span></span></span></button><button class="ibtn" data-act="t-edit" data-d="${t.id}" aria-label="Edit tournament">${PEN}</button></div>
     ${open ? `<div class="m-body"><div class="sqb">${r.ms.length ? r.ms.map(tLine).join('') : '<p class="txt">No matches added yet.</p>'}</div><div class="s-actions"><button class="btn sm danger" data-act="t-del" data-d="${t.id}">Delete tournament</button></div></div>` : ''}</article>`;
 }
 function hTourn() {
@@ -1308,12 +1311,17 @@ function hMatches() {
   return facChips(true) + (ms.length ? `<div class="list-stack">${ms.map(m => {
     const open = HOPEN.has(m.id), sc = SCENARIOS[m.scenario], side = (i, r) => `<div class="side s${i} ${r ? 'r' : ''} ${m.winner === i ? 'won' : ''}"><span class="nm"><i></i>${esc(m.p[i].name)}</span><small>${fCol(m.p[i].faction)}</small></div>`;
     return `<article class="match"><button class="m-head" data-act="h-open" data-d="${m.id}" aria-expanded="${open}">
-      <div class="m-meta"><span>${dateStr(m.t)}</span><span>${sc ? esc(sc.n) : 'No scenario'}</span><span>Round ${m.round}</span>${m.sample ? '<span class="chip">Sample</span>' : ''}<span>${m.winner < 0 ? 'Draw' : showP2() ? esc(m.p[m.winner].name) + ' Won' : m.winner === 0 ? 'Won' : 'Lost'}</span>${m.me >= 0 && (showP2() || m.me === 0) ? `<span class="chip">I played ${esc(m.p[m.me].name)}</span>` : ''}</div>
+      <div class="m-meta"><span>${dateStr(m.t)}</span><span>${sc ? esc(sc.n) : 'No scenario'}</span><span>Rounds: ${m.round}</span>${m.sample ? '<span class="chip">Sample</span>' : ''}<span>${m.winner < 0 ? 'Draw' : tRes(m) === 'W' ? '<span class="cw">Win</span>' : '<span class="cl">Loss</span>'}</span>${m.me >= 0 && (showP2() || m.me === 0) ? `<span class="chip">I played ${esc(m.p[m.me].name)}</span>` : ''}</div>
       <div class="m-score">${side(0, false)}<span class="sc num"><span class="s0">${m.p[0].score}</span><span class="dash"> – </span><span class="s1">${m.p[1].score}</span></span>${showP2() ? side(1, true) : ''}</div></button>
       ${open ? `<div class="m-body">${[0, 1].map(i => `<div>${i === 1 ? `<div class="rowh"><button class="ibtn sm" data-act="m-edit" data-d="${m.id}" aria-label="Edit Player 2 name and date">${PEN}</button><span class="label">${esc(m.p[i].name)} · ${fCol(m.p[i].faction)} · scored ${m.p[i].score} (mission ${m.p[i].manual}, ships ${m.p[i].ships})</span></div>` : `<span class="label">${esc(m.p[i].name)} · ${fCol(m.p[i].faction)} · scored ${m.p[i].score} (mission ${m.p[i].manual}, ships ${m.p[i].ships})</span>`}${i === 1 && HV.me === m.id ? `<div class="rowh pad wrap"><input class="name-in box" id="me-name" value="${esc(m.p[1].name)}" maxlength="24" aria-label="Player 2 name" autocomplete="off"><input class="name-in box" type="date" id="me-date" value="${new Date(m.t - new Date(m.t).getTimezoneOffset() * 60000).toISOString().slice(0, 10)}" aria-label="Match date"><button class="btn sm primary" data-act="m-save" data-d="${m.id}">Save</button><button class="btn sm" data-act="m-edit" data-d="${m.id}">Cancel</button></div>` : ''}${squadBlock(m.p[i].squad)}</div>`).join('')}
         <p class="txt">${m.reason === 'target' ? 'Won on reaching the target score' : m.reason === 'elimination' ? 'Ended when one side had no ships left' : m.reason === 'rounds' ? 'Went the full number of rounds' : 'Ended manually'} · round ${m.round} · ${Math.round(m.usedMs / 60000)} minutes played</p>
         ${m.notes ? `<p class="txt"><b>Notes.</b> ${esc(m.notes)}</p>` : ''}<div class="s-actions"><button class="btn sm danger" data-act="h-del" data-d="${m.id}">Delete match</button></div></div>` : ''}</article>`;
   }).join('')}</div>` : emptyHist('No matches for that faction yet.'));
+}
+function listHead(l, r) {
+  const ed = HV.le === l.id;
+  const inner = `${CHEV}<span class="tx">${ed ? `<input class="name-in box inl" data-lname="${l.id}" value="${esc(l.name)}" maxlength="40" aria-label="List name" autocomplete="off">` : `<span class="nm">${esc(l.name)}</span>`}<span class="sub"><span>${l.points} pts</span><span>${l.ships.length} ship${l.ships.length > 1 ? 's' : ''}</span><span>Record ${recHtml(r.w, r.l, r.d)}</span><span>${dateStr(l.saved)}</span>${l.sample ? '<span class="chip">Sample</span>' : ''}</span></span>`;
+  return `<div class="m-head rowh">${ed ? `<div class="m-tog">${inner}</div>` : `<button class="m-tog" data-act="h-open" data-d="${l.id}" aria-expanded="${HOPEN.has(l.id)}">${inner}</button>`}<button class="${ed ? 'btn sm primary' : 'ibtn'}" data-act="l-edit" data-d="${l.id}" aria-label="${ed ? 'Done editing' : 'Edit list name'}">${ed ? 'Done' : PEN}</button></div>`;
 }
 function hLists() {
   if (!H.lists.filter(l => showP2() || listPl(l) !== 1).length) return emptyHist('No saved lists yet. Lists are saved automatically when you finish a match, or tap Save list on a squad.');
@@ -1324,7 +1332,7 @@ function hLists() {
     const tot = by[f].reduce((a, l) => { const r = recordOf(l.sig); a.w += r.w; a.l += r.l; a.d += r.d; return a; }, { w: 0, l: 0, d: 0 });
     return `<h4 class="grp">${fDot(f)}${esc(fName(f))} <small>${by[f].length} list${by[f].length > 1 ? 's' : ''} · record ${recHtml(tot.w, tot.l, tot.d)}</small></h4>
       <div class="list-stack">${by[f].map(l => { const r = recordOf(l.sig);
-        return `<article class="match"><div class="m-head rowh"><button class="m-tog" data-act="h-open" data-d="${l.id}" aria-expanded="${HOPEN.has(l.id)}">${CHEV}<span class="tx"><span class="nm">${esc(l.name)}</span><span class="sub"><span>${l.points} pts</span><span>${l.ships.length} ship${l.ships.length > 1 ? 's' : ''}</span><span>Record ${recHtml(r.w, r.l, r.d)}</span><span>${dateStr(l.saved)}</span>${l.sample ? '<span class="chip">Sample</span>' : ''}</span></span></button><button class="ibtn" data-act="l-edit" data-d="${l.id}" aria-label="Edit list name">${PEN}</button></div>${HV.le === l.id ? `<div class="rowh pad"><input class="name-in box" data-lname="${l.id}" value="${esc(l.name)}" maxlength="40" aria-label="List name" autocomplete="off"><button class="btn sm primary" data-act="l-edit" data-d="${l.id}">Done</button></div>` : ''}
+        return `<article class="match">${listHead(l, r)}
           ${HOPEN.has(l.id) ? `<div class="m-body"><div class="sqb">${l.ships.map(x => { const p = D.pilots[x.pid]; return p ? `<div class="ln"><span>${esc(p.n)}<small>${esc(p.sh)}${x.ups.length ? ' · ' + esc(x.ups.map(u => (D.upgrades[u] || {}).n || '?').join(', ')) : ''}</small></span></div>` : ''; }).join('')}</div>
           <div class="s-actions"><button class="btn sm primary" data-act="list-use" data-d="${l.id}" data-p="0">Use as ${esc(P[0].name)}</button><button class="btn sm" data-act="list-use" data-d="${l.id}" data-p="1">Use as ${esc(P[1].name)}</button><button class="btn sm danger" data-act="list-del" data-d="${l.id}">Delete</button></div></div>` : ''}</article>`; }).join('')}</div>`;
   }).join('');
@@ -1621,7 +1629,7 @@ const A = {
   't-save'() {
     const f = $('#tform'); if (!f) return;
     const id = f.dataset.id || 't_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
-    const t = { id, name: $('#tf-name').value.trim() || 'Untitled event', loc: $('#tf-loc').value.trim(), mode: $('#tf-mode').value, place: $('#tf-place').value, matches: [...f.querySelectorAll('.tf-m input:checked')].map(i => i.value), u: Date.now() };
+    const t = { id, name: $('#tf-name').value.trim() || 'Untitled event', date: $('#tf-date').value, loc: $('#tf-loc').value.trim(), mode: $('#tf-mode').value, place: $('#tf-place').value, matches: [...f.querySelectorAll('.tf-m input:checked')].map(i => i.value), u: Date.now() };
     const i = H.tourn.findIndex(x => x.id === id); if (i < 0) H.tourn.unshift(t); else H.tourn[i] = t;
     saveH(); HV.te = null; renderHistory();
   },
