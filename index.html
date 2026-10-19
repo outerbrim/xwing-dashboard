@@ -569,6 +569,11 @@ body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 
 .tnew { width: 100%; min-height: 48px; font-size: 15px; }
 .m-body > div > .label, .m-body > div > .rowh { margin-bottom: 8px; } .m-body > div > .label { display: block; } .tsq .label { margin-bottom: 4px; display: block; }
 .m-score .nm { align-items: flex-start; line-height: 20px; } .m-score .nm i { margin-top: 6px; }
+.fmt-sel { appearance: none; -webkit-appearance: none; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--fg); background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238a93a6' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 9px center; border: 1px solid var(--line); border-radius: 999px; padding: 0 26px 0 12px; min-height: 32px; cursor: pointer; }
+.fmt-sel.unset { color: var(--fg-dim); font-weight: 500; }
+.round-foot .fmt-sel { margin-left: auto; }
+.mrel { position: relative; } .fmt-pos { position: absolute; top: 8px; right: 12px; z-index: 2; } .fmt-pos .fmt-sel { min-height: 28px; font-size: 12px; }
+.m-meta.padr { padding-right: 118px; min-height: 28px; }
 .g-rbar { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; }
 .g-rbar i { height: 8px; border-radius: 4px; background: var(--surface-3); overflow: hidden; display: block; }
 .g-rbar i.done { background: var(--yellow); }
@@ -805,7 +810,7 @@ function saveMatch() {
   const r = S.result, P = S.players;
   const rec = {
     id: uid(), t: Date.now(), scenario: S.scenario, round: S.round, usedMs: Math.max(0, S.timer.total - remaining()), target: S.settings.target,
-    winner: r.winner, reason: r.reason, me: S.settings.me, notes: (r.notes || '').trim(),
+    winner: r.winner, reason: r.reason, me: S.settings.me, mode: S.format || undefined, notes: (r.notes || '').trim(),
     p: P.map((p, i) => ({ name: p.name, faction: p.faction, score: total(i), manual: p.manual, ships: fromShips(i), squad: snapSquad(p.squad) })),
   };
   H.matches.unshift(rec);
@@ -1083,7 +1088,7 @@ function renderRound() {
     <p class="phase-hint">${esc(hint)}</p>
     <div class="round-nav"><button class="btn" data-act="back" aria-label="Back one step">‹ Back</button>
       <button class="btn primary" data-act="next">${last ? 'End of round ›' : 'Next phase: ' + PHASES[S.phase + 1][0] + ' ›'}</button></div>
-    <div class="round-foot"><button class="btn sm ghost" data-act="open" data-d="dlg-log">Game log</button><button class="btn sm ghost" data-act="end-now">End game</button></div>`;
+    <div class="round-foot"><button class="btn sm ghost" data-act="open" data-d="dlg-log">Game log</button><button class="btn sm ghost" data-act="end-now">End game</button>${fmtSel(S.format, 'data-fmt="cur"')}</div>`;
   $('#hud-round').textContent = S.round + '/' + n;
 }
 function renderGlance() {
@@ -1261,7 +1266,7 @@ function renderImport() {
 let impTarget = 0, impParsed = null, impSel = null, impSelId = '';
 
 /* ---------- history screens ---------- */
-const HV = { me: null, openList: null, te: null, tf: 'all', le: null, pl: [true, true], tab: 'matches', fac: 'all', fmt: 'all', scope: 'all', drill: {}, upSlot: '' };
+const HV = { me: null, openList: null, te: null, tf: 'all', le: null, pl: [true, true], tab: 'matches', fac: 'all', fmt: 'all', mf: 'all', scope: 'all', drill: {}, upSlot: '' };
 function loadSample() {
   const smp = window.XW_SAMPLE; if (!smp) return null; let m = 0, l = 0;
   smp.matches.forEach(x => { if (!H.matches.some(y => y.id === x.id)) { H.matches.push(JSON.parse(JSON.stringify(x))); m++; } });
@@ -1324,24 +1329,26 @@ function hTourn() {
   return `<button class="btn primary tnew" data-act="t-edit" data-d="new">New tournament</button><div class="chipset">${f('all', 'All')}${f('person', 'In person')}${f('online', 'Online')}</div>`
     + (ts.length ? `<div class="list-stack">${ts.map(tCard).join('')}</div>` : emptyHist('No tournaments yet. Tap New tournament to group the matches from an event.'));
 }
+const FMT = { person: 'In person', online: 'Online' };
+const fmtSel = (v, attr) => `<select class="fmt-sel${v ? '' : ' unset'}" ${attr} aria-label="In person or online">${[['', 'Set format'], ['person', 'In person'], ['online', 'Online']].map(([k, t]) => `<option value="${k}" ${(v || '') === k ? 'selected' : ''}>${t}</option>`).join('')}</select>`;
+const fmtChips = key => `<div class="chipset"><span class="label">Format</span>${[['all', 'All'], ['person', 'In person'], ['online', 'Online']].map(([k, t]) => `<button class="btn sm" data-act="h-fmt" data-k="${key}" data-d="${k}" aria-pressed="${HV[key] === k}">${t}</button>`).join('')}</div>`;
 function hMatches() {
   const showP2 = () => true;
   if (!H.matches.length) return emptyHist('No matches saved yet. When a game ends, leave "Save to history" on and choose Finish.');
-  const ms = H.matches.filter(m => HV.fac === 'all' || (showP2() ? m.p.some(p => p.faction === HV.fac) : m.p[0].faction === HV.fac));
-  return facChips(true) + (ms.length ? `<div class="list-stack">${ms.map(m => {
+  const ms = H.matches.filter(m => (HV.fac === 'all' || m.p.some(p => p.faction === HV.fac)) && (HV.mf === 'all' || m.mode === HV.mf));
+  return facChips(true) + fmtChips('mf') + (ms.length ? `<div class="list-stack">${ms.map(m => {
     const open = HOPEN.has(m.id), sc = SCENARIOS[m.scenario], side = (i, r) => `<div class="side s${i} ${r ? 'r' : ''} ${m.winner === i ? 'won' : ''}"><span class="nm"><i></i>${esc(m.p[i].name)}</span><small>${fCol(m.p[i].faction)}</small></div>`;
-    return `<article class="match"><button class="m-head" data-act="h-open" data-d="${m.id}" aria-expanded="${open}">
-      <div class="m-meta"><span>${dateStr(m.t)}</span><span>${sc ? esc(sc.n) : 'No scenario'}</span><span>Rounds: ${m.round}</span>${m.sample ? '<span class="chip">Sample</span>' : ''}<span>${m.winner < 0 ? 'Draw' : tRes(m) === 'W' ? '<span class="cw">Win</span>' : '<span class="cl">Loss</span>'}</span>${m.me >= 0 && (showP2() || m.me === 0) ? `<span class="chip">I played ${esc(m.p[m.me].name)}</span>` : ''}</div>
+    return `<article class="match mrel"><div class="fmt-pos">${fmtSel(m.mode, `data-fmt="${m.id}"`)}</div><button class="m-head" data-act="h-open" data-d="${m.id}" aria-expanded="${open}">
+      <div class="m-meta padr"><span>${dateStr(m.t)}</span><span>${sc ? esc(sc.n) : 'No scenario'}</span><span>Rounds: ${m.round}</span>${m.sample ? '<span class="chip">Sample</span>' : ''}<span>${m.winner < 0 ? 'Draw' : tRes(m) === 'W' ? '<span class="cw">Win</span>' : '<span class="cl">Loss</span>'}</span>${m.me >= 0 && (showP2() || m.me === 0) ? `<span class="chip">I played ${esc(m.p[m.me].name)}</span>` : ''}</div>
       <div class="m-score">${side(0, false)}<span class="sc num"><span class="s0">${m.p[0].score}</span><span class="dash"> – </span><span class="s1">${m.p[1].score}</span></span>${showP2() ? side(1, true) : ''}</div></button>
       ${open ? `<div class="m-body">${[0, 1].map(i => `<div>${i === 1 ? `<div class="rowh"><button class="ibtn sm" data-act="m-edit" data-d="${m.id}" aria-label="Edit Player 2 name and date">${PEN}</button><span class="label">${esc(m.p[i].name)} · ${fCol(m.p[i].faction)} · scored ${m.p[i].score} (mission ${m.p[i].manual}, ships ${m.p[i].ships})</span></div>` : `<span class="label">${esc(m.p[i].name)} · ${fCol(m.p[i].faction)} · scored ${m.p[i].score} (mission ${m.p[i].manual}, ships ${m.p[i].ships})</span>`}${i === 1 && HV.me === m.id ? `<div class="rowh pad wrap"><input class="name-in box" id="me-name" value="${esc(m.p[1].name)}" maxlength="24" aria-label="Player 2 name" autocomplete="off"><input class="name-in box" type="date" id="me-date" value="${new Date(m.t - new Date(m.t).getTimezoneOffset() * 60000).toISOString().slice(0, 10)}" aria-label="Match date"><button class="btn sm primary" data-act="m-save" data-d="${m.id}">Save</button><button class="btn sm" data-act="m-edit" data-d="${m.id}">Cancel</button></div>` : ''}${squadBlock(m.p[i].squad)}</div>`).join('')}
         <p class="txt">${m.reason === 'target' ? 'Won on reaching the target score' : m.reason === 'elimination' ? 'Ended when one side had no ships left' : m.reason === 'rounds' ? 'Went the full number of rounds' : 'Ended manually'} · round ${m.round} · ${Math.round(m.usedMs / 60000)} minutes played</p>
         ${m.notes ? `<p class="txt"><b>Notes.</b> ${esc(m.notes)}</p>` : ''}<div class="s-actions"><button class="btn sm danger" data-act="h-del" data-d="${m.id}">Delete match</button></div></div>` : ''}</article>`;
-  }).join('')}</div>` : emptyHist('No matches for that faction yet.'));
+  }).join('')}</div>` : emptyHist('No matches for those filters yet.'));
 }
-const FMT = { person: 'In person', online: 'Online' };
 function listHead(l, r) {
   const ed = HV.le === l.id;
-  const inner = `${CHEV}<span class="tx">${ed ? `<input class="name-in box inl" data-lname="${l.id}" value="${esc(l.name)}" maxlength="40" aria-label="List name" autocomplete="off">` : `<span class="nm">${esc(l.name)}</span>`}<span class="sub"><span>${l.points} pts</span><span>${l.ships.length} ship${l.ships.length > 1 ? 's' : ''}</span><span>Record ${recHtml(r.w, r.l, r.d)}</span><span>${dateStr(l.saved)}</span>${FMT[l.mode] ? `<span>${FMT[l.mode]}</span>` : ''}${l.sample ? '<span class="chip">Sample</span>' : ''}</span></span>`;
+  const inner = `${CHEV}<span class="tx">${ed ? `<input class="name-in box inl" data-lname="${l.id}" value="${esc(l.name)}" maxlength="40" aria-label="List name" autocomplete="off">` : `<span class="nm">${esc(l.name)}</span>`}<span class="sub"><span>${l.points} pts</span><span>${l.ships.length} ship${l.ships.length > 1 ? 's' : ''}</span><span>Record ${recHtml(r.w, r.l, r.d)}</span><span>${dateStr(l.saved)}</span>${l.sample ? '<span class="chip">Sample</span>' : ''}</span></span>`;
   return `<div class="m-head rowh">${ed ? `<div class="m-tog">${inner}</div>` : `<button class="m-tog" data-act="h-open" data-d="${l.id}" aria-expanded="${HOPEN.has(l.id)}">${inner}</button>`}<button class="${ed ? 'btn sm primary' : 'ibtn'}" data-act="l-edit" data-d="${l.id}" aria-label="${ed ? 'Done editing' : 'Edit list name'}">${ed ? 'Done' : PEN}</button></div>`;
 }
 function hLists() {
@@ -1355,18 +1362,17 @@ function hLists() {
       <div class="list-stack">${by[f].map(l => { const r = recordOf(l.sig);
         return `<article class="match">${listHead(l, r)}
           ${HOPEN.has(l.id) ? `<div class="m-body"><div class="sqb">${l.ships.map(x => { const p = D.pilots[x.pid]; return p ? `<div class="ln"><span>${esc(p.n)}<small>${esc(p.sh)}${x.ups.length ? ' · ' + esc(x.ups.map(u => (D.upgrades[u] || {}).n || '?').join(', ')) : ''}</small></span></div>` : ''; }).join('')}</div>
-          <div class="chipset"><span class="label">Played</span><button class="btn sm" data-act="l-mode" data-d="${l.id}" data-m="person" aria-pressed="${l.mode === 'person'}">In person</button><button class="btn sm" data-act="l-mode" data-d="${l.id}" data-m="online" aria-pressed="${l.mode === 'online'}">Online</button></div>
           <div class="s-actions"><button class="btn sm primary" data-act="list-use" data-d="${l.id}" data-p="0">Use as ${esc(P[0].name)}</button><button class="btn sm" data-act="list-use" data-d="${l.id}" data-p="1">Use as ${esc(P[1].name)}</button><button class="btn sm danger" data-act="list-del" data-d="${l.id}">Delete</button></div></div>` : ''}</article>`; }).join('')}</div>`;
   }).join('');
 }
 function entries() {
-  const out = [], d = HV.drill, fm = new Map(H.lists.map(l => [l.sig, l.mode]));
+  const out = [], d = HV.drill;
   H.matches.forEach(m => m.p.forEach((p, i) => {
     if (!p.squad || (i === 1 && !S.settings.p2stats)) return;
     const e = { m, i, f: p.faction, opp: m.p[1 - i].faction, res: m.winner === i ? 'w' : m.winner === -1 ? 'd' : 'l', score: p.score, squad: p.squad };
     if (HV.fac !== 'all' && e.f !== HV.fac) return;
     if (HV.scope === 'mine' && m.me !== i) return;
-    if (HV.fmt !== 'all' && fm.get(p.squad.sig) !== HV.fmt) return;
+    if (HV.fmt !== 'all' && m.mode !== HV.fmt) return;
     const sh = p.squad.ships;
     if (d.pid != null && !sh.some(s => s.pid === d.pid)) return;
     if (d.ship && !sh.some(s => s.ship === d.ship)) return;
@@ -1439,9 +1445,8 @@ function hInsights() {
     const lab = k === 'pid' ? (D.pilots[v] || {}).n : k === 'scn' ? (SCENARIOS[v] || {}).n : k === 'opp' ? 'vs ' + fName(v) : k === 'slot' ? v + ' slot' : k === 'sig' ? ((H.lists.find(l => l.sig === v) || {}).name || 'List') : v;
     return `<button class="btn sm" data-act="drill-clear" data-k="${k}" aria-label="Remove filter">${esc(lab || v)} ✕</button>`;
   }).join('');
-  const fmtChips = `<div class="chipset"><span class="label">Format</span>${[['all', 'All'], ['person', 'In person'], ['online', 'Online']].map(([k, t]) => `<button class="btn sm" data-act="h-fmt" data-d="${k}" aria-pressed="${HV.fmt === k}">${t}</button>`).join('')}</div>`;
-  const controls = `${facChips()}${fmtChips}${hasMine ? `<div class="seg" role="group"><button data-act="h-scope" data-d="all" aria-pressed="${HV.scope === 'all'}">Both sides</button><button data-act="h-scope" data-d="mine" aria-pressed="${HV.scope === 'mine'}">Only my lists</button></div>` : ''}${chips ? `<div class="chipset"><span class="label">Filtered by</span>${chips}</div>` : ''}`;
-  if (!es.length) return controls + emptyHist(HV.fmt !== 'all' ? `No ${FMT[HV.fmt].toLowerCase()} lists with games yet. Mark a list as ${FMT[HV.fmt].toLowerCase()} on the Lists tab.` : 'No lists match these filters.');
+  const controls = `${facChips()}${fmtChips('fmt')}${hasMine ? `<div class="seg" role="group"><button data-act="h-scope" data-d="all" aria-pressed="${HV.scope === 'all'}">Both sides</button><button data-act="h-scope" data-d="mine" aria-pressed="${HV.scope === 'mine'}">Only my lists</button></div>` : ''}${chips ? `<div class="chipset"><span class="label">Filtered by</span>${chips}</div>` : ''}`;
+  if (!es.length) return controls + emptyHist(HV.fmt !== 'all' ? `No ${FMT[HV.fmt].toLowerCase()} games yet. Set the format on the main screen, or edit it on the Matches tab.` : 'No lists match these filters.');
   const w = es.filter(e => e.res === 'w').length, ships = es.flatMap(e => shipsOfE(e)), lost = ships.filter(s => s.end === 'dead').length;
   const killed = es.reduce((a, e) => a + ((e.m.p[1 - e.i].squad || { ships: [] }).ships.filter(s => s.end === 'dead').length), 0);
   const tiles = `<div class="tiles"><div class="tile"><b>${es.length}</b><span>lists flown</span></div><div class="tile"><b>${pct(w, es.length)}%</b><span>win rate (${w} of ${es.length})</span></div><div class="tile"><b>${(es.reduce((a, e) => a + e.score, 0) / es.length).toFixed(1)}</b><span>average score</span></div><div class="tile"><b>${killed}</b><span>enemy ships destroyed</span></div><div class="tile"><b>${Math.round(es.reduce((a, e) => a + e.m.p[e.i].manual, 0) / es.length)} / ${Math.round(es.reduce((a, e) => a + e.m.p[e.i].ships, 0) / es.length)}</b><span>mission / ship points per game</span></div>${favTile(es)}</div>`;
@@ -1492,7 +1497,7 @@ function mergeH(j) {
   H.tourn = (H.tourn || []).filter(t => !gone.has(t.id));
   (j.tourn || []).forEach(t => { if (!t || !t.id || gone.has(t.id)) return; const i = H.tourn.findIndex(x => x.id === t.id); if (i < 0) H.tourn.push(t); else if ((t.u || 0) > (H.tourn[i].u || 0)) H.tourn[i] = t; });
   (j.matches || []).forEach(x => { if (!x || !x.id || !x.p || gone.has(x.id)) return; const ex = H.matches.find(y => y.id === x.id); if (!ex) { H.matches.push(x); m++; } else if ((x.u || 0) > (ex.u || 0)) Object.assign(ex, x); });
-  (j.lists || []).forEach(x => { if (!x || !x.sig) return; const ex = H.lists.find(y => y.sig === x.sig); if (!ex) { H.lists.push(x); l++; } else if ((x.u || 0) > (ex.u || 0)) { ex.mode = x.mode; ex.u = x.u; } });
+  (j.lists || []).forEach(x => { if (x && x.sig && !H.lists.some(y => y.sig === x.sig)) { H.lists.push(x); l++; } });
   H.matches.sort((a, b) => b.t - a.t); return [m, l];
 }
 async function syncNow() {
@@ -1637,6 +1642,7 @@ const A = {
   'h-fold'(d) { HFOLD.has(d.d) ? HFOLD.delete(d.d) : HFOLD.add(d.d); try { localStorage.setItem('xwdash.hfold', JSON.stringify([...HFOLD])); } catch (e) {} renderHistory(); },
   'h-slot'(d) { HV.upSlot = d.d; renderHistory(); },
   'h-tab'(d) { HV.tab = d.d; renderHistory(); },
+  'h-fmt'(d, b) { HV[b.dataset.k] = d.d; renderHistory(); },
   'h-fac'(d) { HV.fac = d.d; renderHistory(); },
   'h-scope'(d) { HV.scope = d.d; renderHistory(); },
   'm-edit'(d) { HV.me = HV.me === d.d ? null : d.d; renderHistory(); },
@@ -1658,8 +1664,6 @@ const A = {
     saveH(); HV.te = null; $('#dlg-t').close(); renderHistory();
   },
   't-del'(d) { H.tourn = H.tourn.filter(t => t.id !== d.d); H.del = [...(H.del || []), d.d].slice(-1000); saveH(); renderHistory(); },
-  'l-mode'(d) { const l = H.lists.find(x => x.id === d.d); if (!l) return; l.mode = l.mode === d.m ? undefined : d.m; l.u = Date.now(); saveH(); renderHistory(); },
-  'h-fmt'(d) { HV.fmt = d.d; renderHistory(); },
   'l-edit'(d) { HV.le = HV.le === d.d ? null : d.d; renderHistory(); },
   'h-open'(d) { HOPEN.has(d.d) ? HOPEN.delete(d.d) : HOPEN.add(d.d); renderHistory(); },
   'h-del'(d, b) { confirmTap(b, 'Tap again to delete', () => { H.matches = H.matches.filter(m => m.id !== d.d); H.del = [...(H.del || []), d.d].slice(-1000); saveH(); renderHistory(); }); },
@@ -1683,7 +1687,7 @@ const A = {
     try {
       const j = JSON.parse($('#bk-text').value); let m = 0, l = 0;
       (j.matches || []).forEach(x => { if (x && x.id && x.p && !H.matches.some(y => y.id === x.id)) { H.matches.push(x); m++; } });
-      (j.lists || []).forEach(x => { if (!x || !x.sig) return; const ex = H.lists.find(y => y.sig === x.sig); if (!ex) { H.lists.push(x); l++; } else if ((x.u || 0) > (ex.u || 0)) { ex.mode = x.mode; ex.u = x.u; } });
+      (j.lists || []).forEach(x => { if (x && x.sig && !H.lists.some(y => y.sig === x.sig)) { H.lists.push(x); l++; } });
       H.matches.sort((a, b) => b.t - a.t); saveH(); renderHistory(); toast(`Restored ${m} matches and ${l} lists`);
     } catch (e) { toast('That backup could not be read'); }
   },
@@ -1733,6 +1737,12 @@ document.addEventListener('click', e => {
 });
 document.addEventListener('change', e => {
   const t = e.target;
+  if (t.dataset && t.dataset.fmt != null) {
+    const v = t.value;
+    if (t.dataset.fmt === 'cur') { S.format = v; save(); t.classList.toggle('unset', !v); }
+    else { const m = H.matches.find(x => x.id === t.dataset.fmt); if (m) { m.mode = v || undefined; m.u = Date.now(); saveH(); renderHistory(); } }
+    return;
+  }
   if (t.dataset.stext != null) { const k = t.dataset.stext, old = S.settings[k] || '', v = t.value.trim().slice(0, 20); S.settings[k] = v; if (k === 'p1name') { const q = S.players[0]; if (v) q.name = v; else if (q.name === old) q.name = 'Player 1'; } save(); NOSET = true; try { renderAll(); renderHistory(); } catch (e) {} NOSET = false; return; }
   if (t.dataset.name === '1' && S.settings.p2name) { S.settings.p2name = t.value.trim().slice(0, 20); save(); renderAll(); return; }
   if (t.dataset.name != null) { const p = S.players[+t.dataset.name]; p.name = t.value.trim().slice(0, 24) || 'Player ' + (+t.dataset.name + 1); save(); renderAll(); }
