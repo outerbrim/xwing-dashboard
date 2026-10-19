@@ -1261,7 +1261,7 @@ function renderImport() {
 let impTarget = 0, impParsed = null, impSel = null, impSelId = '';
 
 /* ---------- history screens ---------- */
-const HV = { me: null, openList: null, te: null, tf: 'all', le: null, pl: [true, true], tab: 'matches', fac: 'all', scope: 'all', drill: {}, upSlot: '' };
+const HV = { me: null, openList: null, te: null, tf: 'all', le: null, pl: [true, true], tab: 'matches', fac: 'all', fmt: 'all', scope: 'all', drill: {}, upSlot: '' };
 function loadSample() {
   const smp = window.XW_SAMPLE; if (!smp) return null; let m = 0, l = 0;
   smp.matches.forEach(x => { if (!H.matches.some(y => y.id === x.id)) { H.matches.push(JSON.parse(JSON.stringify(x))); m++; } });
@@ -1338,9 +1338,10 @@ function hMatches() {
         ${m.notes ? `<p class="txt"><b>Notes.</b> ${esc(m.notes)}</p>` : ''}<div class="s-actions"><button class="btn sm danger" data-act="h-del" data-d="${m.id}">Delete match</button></div></div>` : ''}</article>`;
   }).join('')}</div>` : emptyHist('No matches for that faction yet.'));
 }
+const FMT = { person: 'In person', online: 'Online' };
 function listHead(l, r) {
   const ed = HV.le === l.id;
-  const inner = `${CHEV}<span class="tx">${ed ? `<input class="name-in box inl" data-lname="${l.id}" value="${esc(l.name)}" maxlength="40" aria-label="List name" autocomplete="off">` : `<span class="nm">${esc(l.name)}</span>`}<span class="sub"><span>${l.points} pts</span><span>${l.ships.length} ship${l.ships.length > 1 ? 's' : ''}</span><span>Record ${recHtml(r.w, r.l, r.d)}</span><span>${dateStr(l.saved)}</span>${l.sample ? '<span class="chip">Sample</span>' : ''}</span></span>`;
+  const inner = `${CHEV}<span class="tx">${ed ? `<input class="name-in box inl" data-lname="${l.id}" value="${esc(l.name)}" maxlength="40" aria-label="List name" autocomplete="off">` : `<span class="nm">${esc(l.name)}</span>`}<span class="sub"><span>${l.points} pts</span><span>${l.ships.length} ship${l.ships.length > 1 ? 's' : ''}</span><span>Record ${recHtml(r.w, r.l, r.d)}</span><span>${dateStr(l.saved)}</span>${FMT[l.mode] ? `<span>${FMT[l.mode]}</span>` : ''}${l.sample ? '<span class="chip">Sample</span>' : ''}</span></span>`;
   return `<div class="m-head rowh">${ed ? `<div class="m-tog">${inner}</div>` : `<button class="m-tog" data-act="h-open" data-d="${l.id}" aria-expanded="${HOPEN.has(l.id)}">${inner}</button>`}<button class="${ed ? 'btn sm primary' : 'ibtn'}" data-act="l-edit" data-d="${l.id}" aria-label="${ed ? 'Done editing' : 'Edit list name'}">${ed ? 'Done' : PEN}</button></div>`;
 }
 function hLists() {
@@ -1354,16 +1355,18 @@ function hLists() {
       <div class="list-stack">${by[f].map(l => { const r = recordOf(l.sig);
         return `<article class="match">${listHead(l, r)}
           ${HOPEN.has(l.id) ? `<div class="m-body"><div class="sqb">${l.ships.map(x => { const p = D.pilots[x.pid]; return p ? `<div class="ln"><span>${esc(p.n)}<small>${esc(p.sh)}${x.ups.length ? ' · ' + esc(x.ups.map(u => (D.upgrades[u] || {}).n || '?').join(', ')) : ''}</small></span></div>` : ''; }).join('')}</div>
+          <div class="chipset"><span class="label">Played</span><button class="btn sm" data-act="l-mode" data-d="${l.id}" data-m="person" aria-pressed="${l.mode === 'person'}">In person</button><button class="btn sm" data-act="l-mode" data-d="${l.id}" data-m="online" aria-pressed="${l.mode === 'online'}">Online</button></div>
           <div class="s-actions"><button class="btn sm primary" data-act="list-use" data-d="${l.id}" data-p="0">Use as ${esc(P[0].name)}</button><button class="btn sm" data-act="list-use" data-d="${l.id}" data-p="1">Use as ${esc(P[1].name)}</button><button class="btn sm danger" data-act="list-del" data-d="${l.id}">Delete</button></div></div>` : ''}</article>`; }).join('')}</div>`;
   }).join('');
 }
 function entries() {
-  const out = [], d = HV.drill;
+  const out = [], d = HV.drill, fm = new Map(H.lists.map(l => [l.sig, l.mode]));
   H.matches.forEach(m => m.p.forEach((p, i) => {
     if (!p.squad || (i === 1 && !S.settings.p2stats)) return;
     const e = { m, i, f: p.faction, opp: m.p[1 - i].faction, res: m.winner === i ? 'w' : m.winner === -1 ? 'd' : 'l', score: p.score, squad: p.squad };
     if (HV.fac !== 'all' && e.f !== HV.fac) return;
     if (HV.scope === 'mine' && m.me !== i) return;
+    if (HV.fmt !== 'all' && fm.get(p.squad.sig) !== HV.fmt) return;
     const sh = p.squad.ships;
     if (d.pid != null && !sh.some(s => s.pid === d.pid)) return;
     if (d.ship && !sh.some(s => s.ship === d.ship)) return;
@@ -1436,8 +1439,9 @@ function hInsights() {
     const lab = k === 'pid' ? (D.pilots[v] || {}).n : k === 'scn' ? (SCENARIOS[v] || {}).n : k === 'opp' ? 'vs ' + fName(v) : k === 'slot' ? v + ' slot' : k === 'sig' ? ((H.lists.find(l => l.sig === v) || {}).name || 'List') : v;
     return `<button class="btn sm" data-act="drill-clear" data-k="${k}" aria-label="Remove filter">${esc(lab || v)} ✕</button>`;
   }).join('');
-  const controls = `${facChips()}${hasMine ? `<div class="seg" role="group"><button data-act="h-scope" data-d="all" aria-pressed="${HV.scope === 'all'}">Both sides</button><button data-act="h-scope" data-d="mine" aria-pressed="${HV.scope === 'mine'}">Only my lists</button></div>` : ''}${chips ? `<div class="chipset"><span class="label">Filtered by</span>${chips}</div>` : ''}`;
-  if (!es.length) return controls + emptyHist('No lists match these filters.');
+  const fmtChips = `<div class="chipset"><span class="label">Format</span>${[['all', 'All'], ['person', 'In person'], ['online', 'Online']].map(([k, t]) => `<button class="btn sm" data-act="h-fmt" data-d="${k}" aria-pressed="${HV.fmt === k}">${t}</button>`).join('')}</div>`;
+  const controls = `${facChips()}${fmtChips}${hasMine ? `<div class="seg" role="group"><button data-act="h-scope" data-d="all" aria-pressed="${HV.scope === 'all'}">Both sides</button><button data-act="h-scope" data-d="mine" aria-pressed="${HV.scope === 'mine'}">Only my lists</button></div>` : ''}${chips ? `<div class="chipset"><span class="label">Filtered by</span>${chips}</div>` : ''}`;
+  if (!es.length) return controls + emptyHist(HV.fmt !== 'all' ? `No ${FMT[HV.fmt].toLowerCase()} lists with games yet. Mark a list as ${FMT[HV.fmt].toLowerCase()} on the Lists tab.` : 'No lists match these filters.');
   const w = es.filter(e => e.res === 'w').length, ships = es.flatMap(e => shipsOfE(e)), lost = ships.filter(s => s.end === 'dead').length;
   const killed = es.reduce((a, e) => a + ((e.m.p[1 - e.i].squad || { ships: [] }).ships.filter(s => s.end === 'dead').length), 0);
   const tiles = `<div class="tiles"><div class="tile"><b>${es.length}</b><span>lists flown</span></div><div class="tile"><b>${pct(w, es.length)}%</b><span>win rate (${w} of ${es.length})</span></div><div class="tile"><b>${(es.reduce((a, e) => a + e.score, 0) / es.length).toFixed(1)}</b><span>average score</span></div><div class="tile"><b>${killed}</b><span>enemy ships destroyed</span></div><div class="tile"><b>${Math.round(es.reduce((a, e) => a + e.m.p[e.i].manual, 0) / es.length)} / ${Math.round(es.reduce((a, e) => a + e.m.p[e.i].ships, 0) / es.length)}</b><span>mission / ship points per game</span></div>${favTile(es)}</div>`;
@@ -1488,7 +1492,7 @@ function mergeH(j) {
   H.tourn = (H.tourn || []).filter(t => !gone.has(t.id));
   (j.tourn || []).forEach(t => { if (!t || !t.id || gone.has(t.id)) return; const i = H.tourn.findIndex(x => x.id === t.id); if (i < 0) H.tourn.push(t); else if ((t.u || 0) > (H.tourn[i].u || 0)) H.tourn[i] = t; });
   (j.matches || []).forEach(x => { if (!x || !x.id || !x.p || gone.has(x.id)) return; const ex = H.matches.find(y => y.id === x.id); if (!ex) { H.matches.push(x); m++; } else if ((x.u || 0) > (ex.u || 0)) Object.assign(ex, x); });
-  (j.lists || []).forEach(x => { if (x && x.sig && !H.lists.some(y => y.sig === x.sig)) { H.lists.push(x); l++; } });
+  (j.lists || []).forEach(x => { if (!x || !x.sig) return; const ex = H.lists.find(y => y.sig === x.sig); if (!ex) { H.lists.push(x); l++; } else if ((x.u || 0) > (ex.u || 0)) { ex.mode = x.mode; ex.u = x.u; } });
   H.matches.sort((a, b) => b.t - a.t); return [m, l];
 }
 async function syncNow() {
@@ -1654,6 +1658,8 @@ const A = {
     saveH(); HV.te = null; $('#dlg-t').close(); renderHistory();
   },
   't-del'(d) { H.tourn = H.tourn.filter(t => t.id !== d.d); H.del = [...(H.del || []), d.d].slice(-1000); saveH(); renderHistory(); },
+  'l-mode'(d) { const l = H.lists.find(x => x.id === d.d); if (!l) return; l.mode = l.mode === d.m ? undefined : d.m; l.u = Date.now(); saveH(); renderHistory(); },
+  'h-fmt'(d) { HV.fmt = d.d; renderHistory(); },
   'l-edit'(d) { HV.le = HV.le === d.d ? null : d.d; renderHistory(); },
   'h-open'(d) { HOPEN.has(d.d) ? HOPEN.delete(d.d) : HOPEN.add(d.d); renderHistory(); },
   'h-del'(d, b) { confirmTap(b, 'Tap again to delete', () => { H.matches = H.matches.filter(m => m.id !== d.d); H.del = [...(H.del || []), d.d].slice(-1000); saveH(); renderHistory(); }); },
@@ -1677,7 +1683,7 @@ const A = {
     try {
       const j = JSON.parse($('#bk-text').value); let m = 0, l = 0;
       (j.matches || []).forEach(x => { if (x && x.id && x.p && !H.matches.some(y => y.id === x.id)) { H.matches.push(x); m++; } });
-      (j.lists || []).forEach(x => { if (x && x.sig && !H.lists.some(y => y.sig === x.sig)) { H.lists.push(x); l++; } });
+      (j.lists || []).forEach(x => { if (!x || !x.sig) return; const ex = H.lists.find(y => y.sig === x.sig); if (!ex) { H.lists.push(x); l++; } else if ((x.u || 0) > (ex.u || 0)) { ex.mode = x.mode; ex.u = x.u; } });
       H.matches.sort((a, b) => b.t - a.t); saveH(); renderHistory(); toast(`Restored ${m} matches and ${l} lists`);
     } catch (e) { toast('That backup could not be read'); }
   },
